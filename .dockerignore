@@ -1,0 +1,9 @@
+.git
+.github
+*.log
+webui/node_modules
+webui/mock_data
+webui/.tmp_uploads
+temp_ref
+.DS_Store
+Thumbs.db

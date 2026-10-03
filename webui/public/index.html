@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project Zomboid Server Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧟</text></svg>">
+</head>
+<body>
+  <!-- AUTH MODAL -->
+  <div id="authOverlay" class="modal-overlay hidden">
+    <div class="auth-card">
+      <div class="auth-header">
+        <span class="auth-icon">🧟</span>
+        <h2>PROJECT ZOMBOID</h2>
+        <p class="subtitle">Dedicated Server Command Center</p>
+      </div>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="loginPassword">Admin Password</label>
+          <input type="password" id="loginPassword" placeholder="Enter server admin password" required autocomplete="current-password">
+        </div>
+        <div id="loginError" class="error-msg hidden"></div>
+        <button type="submit" class="btn btn-primary btn-block">Unlock Console</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MAIN APP LAYOUT -->
+  <div class="app-layout">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">☣️</div>
+        <div class="brand-info">
+          <h1>PZ DEDICATED</h1>
+          <span class="brand-version">Manager v1.0</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <a href="#dashboard" class="nav-item active" data-tab="dashboard">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+          <span>Dashboard</span>
+        </a>
+        <a href="#console" class="nav-item" data-tab="console">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 12.5v-1.5H8V15h4v1.5zm-5-3.5L3.5 10.5 7 8l1.5 1.5-2 2 2 2L7 13z"/></svg>
+          <span>Live Console</span>
+          <span id="logBadge" class="nav-badge pulse hidden">LIVE</span>
+        </a>
+        <a href="#sandbox" class="nav-item" data-tab="sandbox">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-4H6v-2h4V7h2v4h4v2h-4v4z"/></svg>
+          <span>Sandbox Editor</span>
+        </a>
+        <a href="#mods" class="nav-item" data-tab="mods">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5C13 2.12 11.88 1 10.5 1S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7 1.49 0 2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5s-1.12-2.5-2.5-2.5z"/></svg>
+          <span>Mods Manager</span>
+        </a>
+        <a href="#server-ini" class="nav-item" data-tab="server-ini">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+          <span>Server Config</span>
+        </a>
+        <a href="#players" class="nav-item" data-tab="players">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+          <span>Players & Bans</span>
+          <span id="playerBadge" class="nav-badge count">0</span>
+        </a>
+        <a href="#worlds" class="nav-item" data-tab="worlds">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+          <span>Worlds & Backups</span>
+        </a>
+        <a href="#files" class="nav-item" data-tab="files">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
+          <span>File Explorer</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="server-quick-status">
+          <div class="status-indicator">
+            <span id="quickStatusDot" class="status-dot stopped"></span>
+            <span id="quickStatusText">OFFLINE</span>
+          </div>
+          <span id="quickUptimeText" class="uptime-text">00:00:00</span>
+        </div>
+        <button id="logoutBtn" class="btn btn-outline-danger btn-sm btn-block">Logout</button>
+      </div>
+    </aside>
+
+    <!-- CONTENT AREA -->
+    <main class="main-content">
+      <!-- TOP HEADER -->
+      <header class="top-header">
+        <div class="header-left">
+          <h2 id="pageTitle">Dashboard</h2>
+          <span class="server-badge" id="headerServerName">server</span>
+        </div>
+        <div class="header-controls">
+          <button id="btnQuickStart" class="btn btn-success btn-sm">
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            <span>Start</span>
+          </button>
+          <button id="btnQuickStop" class="btn btn-danger btn-sm" disabled>
+            <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+            <span>Stop</span>
+          </button>
+          <button id="btnQuickRestart" class="btn btn-warning btn-sm" disabled>
+            <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+            <span>Restart</span>
+          </button>
+          <button id="btnQuickBroadcast" class="btn btn-secondary btn-sm" title="Broadcast Message">
+            <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- TAB SECTIONS -->
+      <div class="tab-container">
+        <!-- 1. DASHBOARD TAB -->
+        <section id="tab-dashboard" class="tab-pane active">
+          <!-- STATS CARDS GRID -->
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="stat-title">SERVER STATE</span>
+                <span class="stat-icon">⚡</span>
+              </div>
+              <div class="stat-value" id="dashStatus">STOPPED</div>
+              <div class="stat-sub" id="dashUptime">Uptime: 0m</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="stat-title">ACTIVE PLAYERS</span>
+                <span class="stat-icon">👥</span>
+              </div>
+              <div class="stat-value" id="dashPlayersCount">0</div>
+              <div class="stat-sub" id="dashMaxPlayers">Max Limit: 32</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="stat-title">RAM USAGE</span>
+                <span class="stat-icon">💾</span>
+              </div>
+              <div class="stat-value" id="dashMemValue">0%</div>
+              <div class="stat-sub progress-bar-wrap">
+                <div class="progress-bar"><div class="progress-fill" id="dashMemBar" style="width: 0%"></div></div>
+              </div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="stat-title">CPU CORES</span>
+                <span class="stat-icon">⚙️</span>
+              </div>
+              <div class="stat-value" id="dashCpuCores">--</div>
+              <div class="stat-sub" id="dashCpuLoad">Load: 0.00</div>
+            </div>
+          </div>
+
+          <!-- ACTIONS & DETAILS GRID -->
+          <div class="dashboard-grid">
+            <!-- QUICK CONTROL CENTER -->
+            <div class="panel">
+              <div class="panel-header">
+                <h3>🕹️ Server Operations</h3>
+              </div>
+              <div class="panel-body">
+                <div class="action-buttons-grid">
+                  <button id="dashBtnStart" class="btn btn-success btn-lg">
+                    <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    <span>Launch Server</span>
+                  </button>
+                  <button id="dashBtnStop" class="btn btn-danger btn-lg">
+                    <svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+                    <span>Stop Server</span>
+                  </button>
+                  <button id="dashBtnRestart" class="btn btn-warning btn-lg">
+                    <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                    <span>Restart</span>
+                  </button>
+                  <button id="dashBtnSteamUpdate" class="btn btn-primary btn-lg">
+                    <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+                    <span>Update Server (SteamCMD)</span>
+                  </button>
+                  <button id="dashBtnSyncMods" class="btn btn-secondary btn-lg">
+                    <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+                    <span>Sync Workshop Mods</span>
+                  </button>
+                  <button id="dashBtnBackup" class="btn btn-secondary btn-lg">
+                    <svg viewBox="0 0 24 24"><path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z"/></svg>
+                    <span>Instant World Backup</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- SERVER DETAILS & INFO -->
+            <div class="panel">
+              <div class="panel-header">
+                <h3>📋 Server Information</h3>
+              </div>
+              <div class="panel-body">
+                <table class="info-table">
+                  <tr>
+                    <td class="info-label">Server Name</td>
+                    <td class="info-val font-mono" id="infoServerName">server</td>
+                  </tr>
+                  <tr>
+                    <td class="info-label">Game Ports</td>
+                    <td class="info-val font-mono">16261 UDP (Default), 16262 UDP</td>
+                  </tr>
+                  <tr>
+                    <td class="info-label">RCON Port</td>
+                    <td class="info-val font-mono">27015 TCP</td>
+                  </tr>
+                  <tr>
+                    <td class="info-label">Language</td>
+                    <td class="info-val" id="infoLanguage">en</td>
+                  </tr>
+                  <tr>
+                    <td class="info-label">JVM Max RAM</td>
+                    <td class="info-val font-mono" id="infoMaxRam">8g</td>
+                  </tr>
+                  <tr>
+                    <td class="info-label">Save Directory</td>
+                    <td class="info-val font-mono text-muted">/data/Zomboid/saves/Multiplayer/</td>
+                  </tr>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- MINI CONSOLE PREVIEW -->
+          <div class="panel mt-4">
+            <div class="panel-header">
+              <h3>📜 Recent Server Activity</h3>
+              <a href="#console" class="btn btn-outline btn-xs" data-tab="console">View Full Terminal &rarr;</a>
+            </div>
+            <div class="panel-body p-0">
+              <pre id="dashMiniConsole" class="terminal-box mini-terminal">Connecting to server log stream...</pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. CONSOLE TAB -->
+        <section id="tab-console" class="tab-pane">
+          <div class="terminal-wrapper">
+            <div class="terminal-toolbar">
+              <div class="toolbar-left">
+                <span class="terminal-title">🖥️ Interactive Server Terminal</span>
+                <span class="live-pill"><span class="live-dot"></span> LIVE STREAM</span>
+              </div>
+              <div class="toolbar-right">
+                <input type="text" id="terminalFilter" class="form-input-sm" placeholder="Filter logs...">
+                <label class="toggle-label">
+                  <input type="checkbox" id="autoScrollCheck" checked>
+                  <span>Auto-scroll</span>
+                </label>
+                <button id="btnClearConsole" class="btn btn-outline btn-xs">Clear</button>
+                <button id="btnCopyLogs" class="btn btn-outline btn-xs">Copy</button>
+              </div>
+            </div>
+
+            <!-- TERMINAL DISPLAY -->
+            <div id="terminalScreen" class="terminal-screen"></div>
+
+            <!-- QUICK CHIP COMMANDS -->
+            <div class="command-chips">
+              <span class="chip-label">Quick Commands:</span>
+              <button class="cmd-chip" data-cmd="players">players</button>
+              <button class="cmd-chip" data-cmd="save">save</button>
+              <button class="cmd-chip" data-cmd="help">help</button>
+              <button class="cmd-chip" data-cmd="showoptions">showoptions</button>
+              <button class="cmd-chip" data-cmd="startrain">startrain</button>
+              <button class="cmd-chip" data-cmd="stoprain">stoprain</button>
+            </div>
+
+            <!-- TERMINAL INPUT FORM -->
+            <form id="consoleForm" class="terminal-input-bar">
+              <span class="terminal-prompt">&gt;</span>
+              <input type="text" id="consoleInput" placeholder="Type server command (e.g. 'help', 'save', 'players', 'broadcast Hello!')..." autocomplete="off">
+              <button type="submit" class="btn btn-primary">Send</button>
+            </form>
+          </div>
+        </section>
+
+        <!-- 3. SANDBOX EDITOR TAB -->
+        <section id="tab-sandbox" class="tab-pane">
+          <div class="panel">
+            <div class="panel-header">
+              <div class="header-left">
+                <h3>🛠️ Visual Sandbox Settings (`SandboxVars.lua`)</h3>
+                <p class="subtitle">Configure zombie behavior, world events, loot scarcity, vehicles, and timing.</p>
+              </div>
+              <div class="header-actions">
+                <div class="preset-dropdown-wrap">
+                  <label for="sandboxPresetSelect">Load Preset:</label>
+                  <select id="sandboxPresetSelect" class="form-select-sm">
+                    <option value="">-- Choose Preset --</option>
+                    <option value="apocalypse">Apocalypse (Hardcore)</option>
+                    <option value="survivor">Survivor (Standard)</option>
+                    <option value="builder">Builder (Casual)</option>
+                    <option value="sprinters">28 Days Later (Sprinters 🏃)</option>
+                  </select>
+                </div>
+                <button id="btnToggleRawSandbox" class="btn btn-outline btn-sm">Toggle Raw Lua</button>
+                <button id="btnSaveSandbox" class="btn btn-success btn-sm">💾 Save Sandbox Changes</button>
+              </div>
+            </div>
+
+            <div class="panel-body">
+              <!-- SEARCH AND CATEGORY FILTER -->
+              <div class="filter-bar">
+                <input type="text" id="sandboxSearch" placeholder="🔍 Search sandbox settings..." class="form-input">
+                <div class="category-pills" id="sandboxCategories">
+                  <button class="cat-pill active" data-cat="all">All</button>
+                  <button class="cat-pill" data-cat="Zombie Lore">Zombie Lore</button>
+                  <button class="cat-pill" data-cat="Population">Population</button>
+                  <button class="cat-pill" data-cat="Population Multipliers">Multipliers</button>
+                  <button class="cat-pill" data-cat="Time & World">Time & World</button>
+                  <button class="cat-pill" data-cat="Loot Rarity">Loot Rarity</button>
+                  <button class="cat-pill" data-cat="Character">Character</button>
+                </div>
+              </div>
+
+              <!-- DYNAMIC VISUAL SETTINGS GRID -->
+              <div id="sandboxFormContainer" class="settings-grid">
+                <!-- Dynamically populated -->
+              </div>
+
+              <!-- RAW LUA EDITOR FALLBACK -->
+              <div id="sandboxRawContainer" class="hidden mt-4">
+                <div class="raw-editor-header">
+                  <span>Raw `SandboxVars.lua`</span>
+                </div>
+                <textarea id="sandboxRawTextarea" class="code-editor" rows="24" spellcheck="false"></textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. MODS MANAGER TAB -->
+        <section id="tab-mods" class="tab-pane">
+          <div class="panel">
+            <div class="panel-header">
+              <div class="header-left">
+                <h3>🧩 Steam Workshop & Mod Manager</h3>
+                <p class="subtitle">Easily manage workshop items and mod IDs in `server.ini`.</p>
+              </div>
+              <div class="header-actions">
+                <button id="btnSyncModsTab" class="btn btn-primary btn-sm">
+                  <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+                  <span>Sync & Download Mods Now</span>
+                </button>
+                <button id="btnSaveMods" class="btn btn-success btn-sm">💾 Save Mod Config</button>
+              </div>
+            </div>
+
+            <div class="panel-body">
+              <!-- ENHANCED ADD MOD PANEL (Single, Steam Collection, Bulk Paste) -->
+              <div class="card add-mod-card mb-4">
+                <div class="mod-modes-header">
+                  <div class="mod-mode-tabs">
+                    <button type="button" class="btn btn-sm btn-secondary active mod-tab-btn" data-modtab="single">➕ Single Mod</button>
+                    <button type="button" class="btn btn-sm btn-secondary mod-tab-btn" data-modtab="collection">📚 Steam Collection</button>
+                    <button type="button" class="btn btn-sm btn-secondary mod-tab-btn" data-modtab="bulk">📋 Bulk Paste / Raw</button>
+                  </div>
+                </div>
+
+                <!-- 1. SINGLE MOD TAB -->
+                <div id="modtab-single" class="mod-tab-content active mt-2">
+                  <div class="add-mod-form">
+                    <div class="form-group flex-1">
+                      <label>Steam Workshop ID or URL</label>
+                      <div class="input-with-button">
+                        <input type="text" id="newWorkshopId" placeholder="e.g. 2688809268 or https://steamcommunity.com/sharedfiles/filedetails/?id=...">
+                        <button type="button" id="btnAutoDetectMod" class="btn btn-outline btn-sm" title="Auto-detect Mod ID from Steam">🔍 Auto-Detect</button>
+                      </div>
+                    </div>
+                    <div class="form-group flex-1">
+                      <label>Mod ID (internal name)</label>
+                      <input type="text" id="newModId" placeholder="e.g. Authentic ZLite or Tsar's Common Library">
+                    </div>
+                    <button id="btnAddMod" class="btn btn-primary align-self-end">Add Mod</button>
+                  </div>
+                  <div id="singleModDetectStatus" class="text-muted font-mono mt-2 hidden" style="font-size: 11px;"></div>
+                </div>
+
+                <!-- 2. STEAM COLLECTION TAB -->
+                <div id="modtab-collection" class="mod-tab-content hidden mt-2">
+                  <p class="subtitle mb-2">Fetch and import all workshop items from any public Steam Workshop Collection URL or ID.</p>
+                  <div class="add-mod-form">
+                    <div class="form-group flex-1">
+                      <label>Steam Collection URL or ID</label>
+                      <input type="text" id="steamCollectionInput" placeholder="e.g. https://steamcommunity.com/sharedfiles/filedetails/?id=... or 2848248911">
+                    </div>
+                    <button type="button" id="btnFetchCollection" class="btn btn-primary align-self-end">
+                      <span id="btnFetchCollectionText">Fetch Collection</span>
+                      <span id="btnFetchCollectionSpinner" class="spinner hidden"></span>
+                    </button>
+                  </div>
+
+                  <!-- Collection Results Preview -->
+                  <div id="collectionPreviewWrap" class="mt-4 hidden">
+                    <div class="collection-summary-bar">
+                      <div>
+                        <h4 id="collectionPreviewTitle">Collection Title</h4>
+                        <span id="collectionPreviewCount" class="text-muted font-mono">0 items found</span>
+                      </div>
+                      <div class="collection-actions">
+                        <button type="button" id="btnCollectionSelectAll" class="btn btn-outline btn-xs">Select All</button>
+                        <button type="button" id="btnCollectionDeselectAll" class="btn btn-outline btn-xs">Deselect All</button>
+                        <button type="button" id="btnImportCollectionMods" class="btn btn-success btn-sm">➕ Add Selected Mods (<span id="collectionSelectedCount">0</span>)</button>
+                      </div>
+                    </div>
+                    <div class="table-wrap mt-2 max-h-300">
+                      <table class="data-table" id="collectionItemsTable">
+                        <thead>
+                          <tr>
+                            <th style="width: 40px;"><input type="checkbox" id="checkCollectionMaster" checked></th>
+                            <th style="width: 60px;">Image</th>
+                            <th>Workshop Title</th>
+                            <th>Workshop ID</th>
+                            <th>Detected Mod ID(s)</th>
+                          </tr>
+                        </thead>
+                        <tbody id="collectionItemsBody">
+                          <!-- Populated dynamically -->
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 3. BULK PASTE TAB -->
+                <div id="modtab-bulk" class="mod-tab-content hidden mt-2">
+                  <p class="subtitle mb-2">Paste raw <code>WorkshopItems=...</code> and <code>Mods=...</code> strings or lists of Workshop IDs and Mod IDs.</p>
+                  <div class="form-group">
+                    <textarea id="bulkPasteTextarea" class="code-editor" rows="6" placeholder="Example 1:&#10;WorkshopItems=2688809268;2790930776;2392709985&#10;Mods=AuthenticZLite;FilibusterRhymesUsedCars;ProfessionFramework&#10;&#10;Example 2 (just numbers/IDs):&#10;2688809268&#10;https://steamcommunity.com/sharedfiles/filedetails/?id=2790930776"></textarea>
+                  </div>
+                  <div class="bulk-paste-controls">
+                    <label class="toggle-label">
+                      <input type="checkbox" id="bulkAutoFetchDetails" checked>
+                      <span>Auto-fetch Mod IDs from Steam for Workshop IDs without Mod IDs</span>
+                    </label>
+                    <button type="button" id="btnProcessBulkPaste" class="btn btn-primary btn-sm">
+                      <span id="btnProcessBulkText">Parse &amp; Import Mods</span>
+                      <span id="btnProcessBulkSpinner" class="spinner hidden"></span>
+                    </button>
+                  </div>
+                  <div id="bulkStatusMsg" class="font-mono mt-2 hidden" style="font-size: 12px;"></div>
+                </div>
+              </div>
+
+
+              <!-- MODS LIST TABLE -->
+              <div class="table-wrap">
+                <table class="data-table" id="modsTable">
+                  <thead>
+                    <tr>
+                      <th style="width: 60px;">Order</th>
+                      <th>Mod ID</th>
+                      <th>Workshop ID</th>
+                      <th>Steam Link</th>
+                      <th>Status</th>
+                      <th style="width: 140px;">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="modsTableBody">
+                    <!-- Dynamically populated -->
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- LOCAL MODS DIRECTORY SCAN -->
+              <div class="mt-6">
+                <h4>📁 Detected Local Mods in `/data/Zomboid/mods`</h4>
+                <div id="localModsList" class="tag-cloud mt-2">
+                  <span class="text-muted">Scanning local directory...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. SERVER CONFIG TAB (server.ini) -->
+        <section id="tab-server-ini" class="tab-pane">
+          <div class="panel">
+            <div class="panel-header">
+              <div class="header-left">
+                <h3>⚙️ Server Configuration (`server.ini`)</h3>
+                <p class="subtitle">General server parameters, networking, PvP, and chat settings.</p>
+              </div>
+              <div class="header-actions">
+                <button id="btnToggleRawIni" class="btn btn-outline btn-sm">Toggle Raw INI</button>
+                <button id="btnSaveServerIni" class="btn btn-success btn-sm">💾 Save Settings</button>
+              </div>
+            </div>
+
+            <div class="panel-body">
+              <div id="iniFormContainer" class="settings-grid">
+                <!-- Dynamically populated from server.ini -->
+              </div>
+
+              <div id="iniRawContainer" class="hidden mt-4">
+                <div class="raw-editor-header">
+                  <span>Raw `server.ini`</span>
+                </div>
+                <textarea id="iniRawTextarea" class="code-editor" rows="24" spellcheck="false"></textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. PLAYERS & BANS TAB -->
+        <section id="tab-players" class="tab-pane">
+          <div class="panel mb-4">
+            <div class="panel-header">
+              <h3>🟢 Currently Connected Players</h3>
+              <button id="btnRefreshPlayers" class="btn btn-outline btn-xs">Refresh</button>
+            </div>
+            <div class="panel-body">
+              <div id="onlinePlayersContainer">
+                <p class="text-muted">No players currently connected.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel mb-4">
+            <div class="panel-header">
+              <h3>👥 Whitelist & Registered Accounts (SQLite DB)</h3>
+              <div class="header-actions">
+                <input type="text" id="whitelistSearch" placeholder="Search user..." class="form-input-sm">
+              </div>
+            </div>
+            <div class="panel-body p-0">
+              <table class="data-table" id="whitelistTable">
+                <thead>
+                  <tr>
+                    <th>Username</th>
+                    <th>Access Level</th>
+                    <th>Banned Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="whitelistTableBody">
+                  <tr><td colspan="4" class="text-center text-muted">Loading registered accounts...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h3>🚫 Ban List</h3>
+            </div>
+            <div class="panel-body p-0">
+              <table class="data-table" id="bansTable">
+                <thead>
+                  <tr>
+                    <th>Username</th>
+                    <th>IP</th>
+                    <th>Steam ID</th>
+                    <th>Reason</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="bansTableBody">
+                  <tr><td colspan="5" class="text-center text-muted">No active bans found.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 7. WORLDS & BACKUPS TAB -->
+        <section id="tab-worlds" class="tab-pane">
+          <div class="panel mb-4">
+            <div class="panel-header">
+              <div class="header-left">
+                <h3>🌍 World Save Status</h3>
+                <p class="subtitle">Multiplayer saves are stored at `/data/Zomboid/saves/Multiplayer/`</p>
+              </div>
+              <button id="btnCreateBackupTab" class="btn btn-primary btn-sm">📦 Create New World Backup</button>
+            </div>
+            <div class="panel-body">
+              <div id="worldsListContainer" class="worlds-grid">
+                <!-- Dynamically populated -->
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h3>💾 Archived Backups (`/data/backups/`)</h3>
+            </div>
+            <div class="panel-body p-0">
+              <table class="data-table" id="backupsTable">
+                <thead>
+                  <tr>
+                    <th>Archive Name</th>
+                    <th>File Size</th>
+                    <th>Date Created</th>
+                    <th style="width: 180px;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="backupsTableBody">
+                  <tr><td colspan="4" class="text-center text-muted">No backups found.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- DANGER ZONE -->
+          <div class="panel danger-panel mt-6">
+            <div class="panel-header">
+              <h3>⚠️ Danger Zone: World Reset / Wipe</h3>
+            </div>
+            <div class="panel-body">
+              <p>Wiping the world will permanently delete all multiplayer map chunks, player structures, and vehicles for this server name. Make sure you create a backup first!</p>
+              <button id="btnWipeWorld" class="btn btn-danger">Wipe Current World Save</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 8. FILE EXPLORER TAB -->
+        <section id="tab-files" class="tab-pane">
+          <div class="panel">
+            <!-- QUICK SHORTCUTS -->
+            <div class="quick-files-bar">
+              <span class="quick-title">⚡ Quick Access:</span>
+              <button class="btn btn-outline btn-xs shortcut-file" data-file="Zomboid/Server/server.ini">server.ini</button>
+              <button class="btn btn-outline btn-xs shortcut-file" data-file="Zomboid/Server/server_SandboxVars.lua">SandboxVars.lua</button>
+              <button class="btn btn-outline btn-xs shortcut-file" data-file="Zomboid/Server/server_spawnregions.lua">spawnregions.lua</button>
+            </div>
+
+            <div class="file-manager-layout">
+              <!-- FILE BROWSER PANE -->
+              <div class="file-browser-pane">
+                <div class="file-browser-header">
+                  <div class="breadcrumb-trail" id="fileBreadcrumbs">/data</div>
+                  <div class="file-actions">
+                    <button id="btnNewFile" class="btn btn-outline btn-xs" title="New File">📄 +</button>
+                    <button id="btnNewFolder" class="btn btn-outline btn-xs" title="New Folder">📁 +</button>
+                    <button id="btnUploadFile" class="btn btn-outline btn-xs" title="Upload File">⬆️</button>
+                    <input type="file" id="fileUploadInput" class="hidden">
+                    <button id="btnRefreshFiles" class="btn btn-outline btn-xs" title="Refresh">🔄</button>
+                  </div>
+                </div>
+
+                <div class="file-list-container" id="fileList">
+                  <!-- Dynamically populated files and folders -->
+                </div>
+              </div>
+
+              <!-- IN-BROWSER CODE EDITOR PANE -->
+              <div class="file-editor-pane">
+                <div class="editor-header">
+                  <div class="editor-file-info">
+                    <span id="editorCurrentFile" class="font-mono">Select a file to view or edit</span>
+                    <span id="editorDirtyFlag" class="dirty-badge hidden">MODIFIED</span>
+                  </div>
+                  <div class="editor-actions">
+                    <button id="btnDownloadCurrentFile" class="btn btn-outline btn-xs" disabled>Download</button>
+                    <button id="btnSaveFile" class="btn btn-success btn-xs" disabled>💾 Save</button>
+                  </div>
+                </div>
+                <textarea id="fileEditorTextarea" class="code-editor full-editor" placeholder="Click any file in the browser on the left to open it in this editor..."></textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- BROADCAST MODAL -->
+  <div id="broadcastModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>📢 Broadcast Message to Server</h3>
+        <button class="modal-close" data-close="broadcastModal">&times;</button>
+      </div>
+      <form id="broadcastForm">
+        <div class="form-group">
+          <label>Message Content</label>
+          <input type="text" id="broadcastMsg" placeholder="Server restarting in 5 minutes! Save your gear." required>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close="broadcastModal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Send Announcement</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATIONS -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- SCRIPTS -->
+  <script src="js/app.js"></script>
+  <script src="js/console.js"></script>
+  <script src="js/sandbox.js"></script>
+  <script src="js/mods.js"></script>
+  <script src="js/server-ini.js"></script>
+  <script src="js/players.js"></script>
+  <script src="js/worlds.js"></script>
+  <script src="js/files.js"></script>
+</body>
+</html>

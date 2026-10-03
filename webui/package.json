@@ -1,0 +1,20 @@
+{
+  "name": "project-zomboid-webui",
+  "version": "1.0.0",
+  "description": "Project Zomboid Dedicated Server Management Web UI & Supervisor",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["project-zomboid", "dedicated-server", "webui", "docker"],
+  "author": "Achira",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0",
+    "multer": "^1.4.5-lts.1",
+    "sqlite3": "^5.1.7",
+    "archiver": "^7.0.1",
+    "cookie-parser": "^1.4.7"
+  }
+}

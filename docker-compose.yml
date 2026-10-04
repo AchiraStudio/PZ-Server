@@ -21,36 +21,36 @@ services:
       - ./cache:/cache
     environment:
       # Timezone
-      - TZ=America/New_York
+      - TZ=${TZ:-America/New_York}
       # User / Group mapping
-      - PUID=1000
-      - PGID=1000
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
 
       # Server Settings
-      - SERVER_NAME=server
-      - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=ChangeThisSecretPassword123!
-      - LANGUAGE=en
+      - SERVER_NAME=${SERVER_NAME:-server}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-ChangeThisSecretPassword123!}
+      - LANGUAGE=${LANGUAGE:-en}
 
       # Web UI Credentials & Port (Default: 5011)
-      - WEBUI_PASSWORD=ChangeThisSecretPassword123!
+      - WEBUI_PASSWORD=${WEBUI_PASSWORD:-ChangeThisSecretPassword123!}
       - WEBUI_PORT=${WEBUI_PORT:-5011}
-      - WEBUI_AUTH_DISABLED=false
+      - WEBUI_AUTH_DISABLED=${WEBUI_AUTH_DISABLED:-false}
 
       # Branch / Version: 'stable', '42', 'unstable', '41', or '42.19'
-      - BUILD=stable
+      - BUILD=${BUILD:-stable}
 
       # Memory Allocation for the Java Virtual Machine
-      - MAX_RAM=8g
+      - MAX_RAM=${MAX_RAM:-8g}
 
       # Set false to allow non-Steam players
-      - STEAM=true
+      - STEAM=${STEAM:-true}
 
       # Auto start server process when container boots
-      - AUTO_START=true
+      - AUTO_START=${AUTO_START:-true}
 
       # Auto download workshop mods for non-steam servers
-      - DISABLE_MOD_DOWNLOADER=false
+      - DISABLE_MOD_DOWNLOADER=${DISABLE_MOD_DOWNLOADER:-false}
 
       # Enable/disable download caching
-      - DISABLE_CACHE=false
+      - DISABLE_CACHE=${DISABLE_CACHE:-false}

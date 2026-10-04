@@ -19,6 +19,9 @@ if [ -f /app/ProjectZomboid64.json ]; then
     fi
 fi
 
+# Ensure all scripts and binaries in /app are executable
+chmod +x /app/*.sh /app/ProjectZomboid* 2>/dev/null || true
+
 # Update JRE if requested
 if [[ "$UPDATE_JRE" =~ ^(1|true|True|y|Y)$ ]]; then
     if [ "$BUILD" == "41" ]; then

@@ -148,7 +148,9 @@ app.post('/api/server/command', (req, res) => {
 
 app.post('/api/server/update', async (req, res) => {
   try {
-    const script = path.join(APP_DIR, 'download_server.sh');
+    const script = fs.existsSync('/usr/local/bin/download_server.sh')
+      ? '/usr/local/bin/download_server.sh'
+      : path.join(APP_DIR, 'download_server.sh');
     const result = await pz.runScript(script);
     res.json(result);
   } catch (err) {

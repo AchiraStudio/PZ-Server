@@ -115,24 +115,38 @@ class PZManager {
     }
 
     const startScript = path.join(this.appDir, 'start-server.sh');
-    const isMock = !fs.existsSync(startScript);
+    const downloadScript = '/usr/local/bin/download_server.sh';
+
+    if (!fs.existsSync(startScript)) {
+      if (fs.existsSync(downloadScript)) {
+        this.addLog('[Supervisor] Dedicated server files not detected in /app. Automatically downloading server via SteamCMD...', 'supervisor');
+        try {
+          await this.runScript(downloadScript);
+        } catch (dlErr) {
+          this.addLog(`[Supervisor] Server download failed: ${dlErr.message}`, 'error');
+          return { success: false, error: dlErr.message };
+        }
+      } else {
+        // Local dev/preview simulation mode when running outside Docker container
+        this.status = 'starting';
+        this.startTime = Date.now();
+        this.broadcast({ type: 'status', status: this.status });
+        this.addLog(`[Supervisor] Starting Project Zomboid Dedicated Server (${this.serverName})...`, 'supervisor');
+        this.addLog('[Supervisor] Running in development/preview mode (start-server.sh not present in local filesystem).', 'supervisor');
+        setTimeout(() => {
+          this.status = 'online';
+          this.addLog('*** SERVER STARTED ***', 'server');
+          this.addLog('Project Zomboid Server listening on port 16261 (UDP)', 'server');
+          this.broadcast({ type: 'status', status: this.status });
+        }, 1500);
+        return { success: true };
+      }
+    }
 
     this.status = 'starting';
     this.startTime = Date.now();
     this.broadcast({ type: 'status', status: this.status });
     this.addLog(`[Supervisor] Starting Project Zomboid Dedicated Server (${this.serverName})...`, 'supervisor');
-
-    if (isMock) {
-      // Local dev/preview simulation mode when running outside Docker container
-      this.addLog('[Supervisor] Running in development/preview mode (start-server.sh not present in local filesystem).', 'supervisor');
-      setTimeout(() => {
-        this.status = 'online';
-        this.addLog('*** SERVER STARTED ***', 'server');
-        this.addLog('Project Zomboid Server listening on port 16261 (UDP)', 'server');
-        this.broadcast({ type: 'status', status: this.status });
-      }, 1500);
-      return { success: true };
-    }
 
     // Command to launch PZ Dedicated Server
     const args = [

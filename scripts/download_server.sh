@@ -29,7 +29,12 @@ if [[ "$DISABLE_CACHE" =~ ^(0|false|False|n|N)$ ]]; then
     cache.sh restore_app "$BUILD" || true
 fi
 
-steamcmd.sh +force_install_dir /app +login anonymous +app_update 380870 validate -beta "${BRANCHE}" +quit
+BETA_ARG=""
+if [ -n "$BRANCHE" ] && [ "$BRANCHE" != "public" ]; then
+    BETA_ARG="-beta ${BRANCHE}"
+fi
+
+steamcmd.sh +force_install_dir /app +login anonymous +app_info_print 380870 +app_update 380870 ${BETA_ARG} validate +quit
 
 if [[ "$DISABLE_CACHE" =~ ^(0|false|False|n|N)$ ]]; then
     cache.sh backup_steamcmd || true

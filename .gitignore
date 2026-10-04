@@ -34,3 +34,5 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+remote_exec.js
+deploy_remote.js

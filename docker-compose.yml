@@ -1,56 +1,24 @@
 services:
   pzserver:
-    container_name: project-zomboid-server
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: project-zomboid-server:latest
+    container_name: project-zomboid-dedicated-server
+    image: docker.io/zicstardust/project-zomboid-dedicated-server:latest
     restart: unless-stopped
+    environment:
+      TZ: ${TZ:-America/New_York}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      BUILD: ${BUILD:-stable}
+      SERVER_NAME: ${SERVER_NAME:-server}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ps4}
+      STEAM: ${STEAM:-true}
+      MAX_RAM: ${MAX_RAM:-8g}
+      DISABLE_MOD_DOWNLOADER: ${DISABLE_MOD_DOWNLOADER:-false}
+      DISABLE_CACHE: ${DISABLE_CACHE:-false}
     ports:
-      # Web UI Management Dashboard (Default 5011 - change here or set WEBUI_PORT in .env)
-      - "${WEBUI_PORT:-5011}:${WEBUI_PORT:-5011}"
-      # Game Traffic Ports (UDP)
       - "16261:16261/udp"
       - "16262:16262/udp"
-      # Optional RCON Port
       # - "27015:27015"
     volumes:
-      # Persistent game saves, server.ini, SandboxVars.lua, database, mods
       - ./data:/data
-      # Download cache to speed up container updates/rebuilds
       - ./cache:/cache
-    environment:
-      # Timezone
-      - TZ=${TZ:-America/New_York}
-      # User / Group mapping
-      - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
-
-      # Server Settings
-      - SERVER_NAME=${SERVER_NAME:-server}
-      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-ChangeThisSecretPassword123!}
-      - LANGUAGE=${LANGUAGE:-en}
-
-      # Web UI Credentials & Port (Default: 5011)
-      - WEBUI_PASSWORD=${WEBUI_PASSWORD:-ChangeThisSecretPassword123!}
-      - WEBUI_PORT=${WEBUI_PORT:-5011}
-      - WEBUI_AUTH_DISABLED=${WEBUI_AUTH_DISABLED:-false}
-
-      # Branch / Version: 'stable', '42', 'unstable', '41', or '42.19'
-      - BUILD=${BUILD:-stable}
-
-      # Memory Allocation for the Java Virtual Machine
-      - MAX_RAM=${MAX_RAM:-8g}
-
-      # Set false to allow non-Steam players
-      - STEAM=${STEAM:-true}
-
-      # Auto start server process when container boots
-      - AUTO_START=${AUTO_START:-true}
-
-      # Auto download workshop mods for non-steam servers
-      - DISABLE_MOD_DOWNLOADER=${DISABLE_MOD_DOWNLOADER:-false}
-
-      # Enable/disable download caching
-      - DISABLE_CACHE=${DISABLE_CACHE:-false}

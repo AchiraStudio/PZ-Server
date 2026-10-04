@@ -18,7 +18,31 @@ services:
     ports:
       - "16261:16261/udp"
       - "16262:16262/udp"
-      # - "27015:27015"
+      - "27015:27015"
     volumes:
       - ./data:/data
       - ./cache:/cache
+
+  webui:
+    container_name: pz-webui
+    build:
+      context: ./webui
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      WEBUI_PORT: ${WEBUI_PORT:-5011}
+      WEBUI_PASSWORD: ${WEBUI_PASSWORD:-${ADMIN_PASSWORD:-ps4}}
+      SERVER_NAME: ${SERVER_NAME:-server}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-ps4}
+      RCON_HOST: pzserver
+      RCON_PORT: 27015
+      RCON_PASSWORD: ${ADMIN_PASSWORD:-ps4}
+      PZ_CONTAINER_NAME: project-zomboid-dedicated-server
+    ports:
+      - "${WEBUI_PORT:-5011}:${WEBUI_PORT:-5011}"
+    volumes:
+      - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - pzserver

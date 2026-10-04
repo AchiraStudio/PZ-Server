@@ -48,27 +48,30 @@ class PZManager {
       });
     }
 
-    // 2. Setup RCON listeners
-    this.rcon.on('connect', () => {
-      this.addLog('[RCON] TCP connected to Project Zomboid Dedicated Server.', 'supervisor');
-    });
-
+    // 2. Setup RCON listeners (silently retry in background without spamming logs)
+    let hadAuth = false;
     this.rcon.on('authenticated', () => {
+      hadAuth = true;
       this.status = 'online';
       this.broadcast({ type: 'status', status: this.status });
-      this.addLog('[RCON] Authenticated successfully! Live interactive console is ready.', 'supervisor');
+      this.addLog('[RCON] Interactive console authenticated. Ready for commands.', 'supervisor');
       this.pollPlayers();
     });
 
     this.rcon.on('disconnect', () => {
-      if (this.status === 'online') {
-        this.addLog('[RCON] Connection closed. Reconnecting...', 'supervisor');
+      if (hadAuth) {
+        this.addLog('[RCON] Interactive console disconnected. Reconnecting in background...', 'supervisor');
+        hadAuth = false;
       }
     });
 
-    this.rcon.on('error', (err) => {
-      // Don't flood logs while server is booting up
+    this.rcon.on('error', () => {
+      // Silently ignore connection errors during boot/retry
     });
+
+    // Ensure server.ini has RCON configured
+    this.ensureRconConfig();
+    setInterval(() => this.ensureRconConfig(), 30000);
 
     // Start RCON client connection attempts
     this.rcon.connect();
@@ -80,6 +83,32 @@ class PZManager {
       }
     }, 15000);
   }
+
+  ensureRconConfig() {
+    try {
+      const serverIniPath = path.join(this.dataDir, 'Zomboid', 'Server', `${this.serverName}.ini`);
+      if (fs.existsSync(serverIniPath)) {
+        let content = fs.readFileSync(serverIniPath, 'utf8');
+        let updated = false;
+
+        const passMatch = content.match(/^RCONPassword=(.*)$/m);
+        if (!passMatch || !passMatch[1] || passMatch[1].trim() === '') {
+          if (passMatch) {
+            content = content.replace(/^RCONPassword=.*$/m, `RCONPassword=${this.rconPassword}`);
+          } else {
+            content += `\nRCONPassword=${this.rconPassword}\n`;
+          }
+          updated = true;
+        }
+
+        if (updated) {
+          fs.writeFileSync(serverIniPath, content, 'utf8');
+          console.log(`[Supervisor] Configured RCONPassword in ${serverIniPath}`);
+        }
+      }
+    } catch (e) {}
+  }
+
 
   async pollPlayers() {
     try {

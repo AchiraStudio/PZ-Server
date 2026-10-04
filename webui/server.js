@@ -120,8 +120,9 @@ app.use('/api', (req, res, next) => {
 // SERVER CONTROLS & STATUS API
 // ==========================================
 
-app.get('/api/status', (req, res) => {
-  res.json(pz.getStats());
+app.get('/api/status', async (req, res) => {
+  const stats = await pz.getStats();
+  res.json(stats);
 });
 
 app.post('/api/server/start', async (req, res) => {
@@ -139,10 +140,10 @@ app.post('/api/server/restart', async (req, res) => {
   res.json(result);
 });
 
-app.post('/api/server/command', (req, res) => {
+app.post('/api/server/command', async (req, res) => {
   const { command } = req.body;
   if (!command) return res.status(400).json({ error: 'Command required' });
-  const result = pz.sendCommand(command);
+  const result = await pz.sendCommand(command);
   res.json(result);
 });
 

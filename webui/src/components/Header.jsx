@@ -224,7 +224,7 @@ export default function Header({
       </div>
 
       {/* Navigation Tabs Bar */}
-      <div className="max-w-[1440px] mx-auto px-4 flex items-center gap-1 overflow-x-auto no-scrollbar">
+      <div className="max-w-[1440px] mx-auto px-4 py-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -232,13 +232,21 @@ export default function Header({
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`flex items-center gap-2 py-2.5 px-3.5 text-xs font-semibold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-                isActive
-                  ? 'border-emerald-500 text-emerald-400 bg-emerald-500/10'
-                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
-              }`}
+              style={{
+                background: isActive ? 'rgba(16, 185, 129, 0.14)' : 'transparent',
+                color: isActive ? '#34d399' : '#94a3b8',
+                border: isActive ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid transparent',
+                borderRadius: '8px',
+                padding: '0.45rem 0.9rem',
+                fontSize: '0.825rem',
+                fontWeight: isActive ? '600' : '500',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                transition: 'all 0.15s ease'
+              }}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
+              <Icon className="w-4 h-4" style={{ color: isActive ? '#34d399' : '#64748b' }} />
               <span>{item.label}</span>
             </button>
           );

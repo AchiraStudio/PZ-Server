@@ -195,49 +195,67 @@ export default function ConsoleTab({ logs, onSendCommand, isOnline }) {
         </div>
       </div>
 
-      {/* Terminal Output Area */}
-      <div
-        ref={logContainerRef}
-        className="flex-1 bg-[#050810] border border-[var(--border-subtle)] rounded-xl p-4 overflow-y-auto font-mono text-[12px] leading-relaxed shadow-inner select-text"
-        style={{ scrollBehavior: 'smooth' }}
-      >
-        {filteredLogs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-2">
-            <Terminal className="w-8 h-8 opacity-40 text-emerald-500" />
-            <p className="text-sm">Waiting for server logs...</p>
+      {/* Terminal Window Container */}
+      <div className="flex-1 flex flex-col bg-[#070b14] border border-[var(--border-subtle)] rounded-xl overflow-hidden shadow-lg">
+        {/* Terminal Window Header Bar */}
+        <div className="flex items-center justify-between px-4 py-2 bg-[#0d1322] border-b border-[var(--border-subtle)] text-xs text-slate-400 select-none">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80 inline-block" />
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 inline-block" />
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 inline-block" />
+            <span className="ml-2 font-mono text-[11px] text-slate-400">pzserver@dedicated:~/live-log</span>
           </div>
-        ) : (
-          filteredLogs.map((log, index) => (
-            <div key={index} className="py-0.5 hover:bg-white/[0.02] flex items-start gap-2">
-              <span className="text-slate-600 select-none text-[10px] w-20 shrink-0">
-                {log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : ''}
-              </span>
-              <div className="break-all flex-1">{formatLogLine(log)}</div>
-            </div>
-          ))
-        )}
-      </div>
+          <div className="flex items-center gap-2 text-[11px] font-mono">
+            <span className="text-slate-500">Port 16261 / RCON 27015</span>
+            <span className="text-slate-600">•</span>
+            <span className="text-emerald-400 font-semibold">{filteredLogs.length} lines</span>
+          </div>
+        </div>
 
-      {/* Command Input Bar */}
-      <div className="flex items-center gap-2 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] p-2 rounded-xl">
-        <div className="text-emerald-400 font-mono pl-2 text-sm select-none font-bold">&gt;</div>
-        <input
-          type="text"
-          value={command}
-          onChange={(e) => setCommand(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type an in-game console command (e.g. setaccesslevel Achira admin, save, players)..."
-          className="flex-1 bg-transparent border-none outline-none text-slate-100 font-mono text-sm px-2"
-          autoFocus
-        />
-        <button
-          onClick={() => handleSend()}
-          disabled={sending || !command.trim()}
-          className="btn btn-primary btn-sm px-4"
+        {/* Terminal Log Output Area */}
+        <div
+          ref={logContainerRef}
+          className="flex-1 p-4 overflow-y-auto font-mono text-[12.5px] leading-relaxed select-text"
+          style={{ scrollBehavior: 'smooth' }}
         >
-          <Send className="w-4 h-4" />
-          <span>Send</span>
-        </button>
+          {filteredLogs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-slate-500 gap-2">
+              <Terminal className="w-8 h-8 opacity-40 text-emerald-500" />
+              <p className="text-sm">Waiting for server logs...</p>
+            </div>
+          ) : (
+            filteredLogs.map((log, index) => (
+              <div key={index} className="py-0.5 hover:bg-white/[0.02] flex items-start gap-2">
+                <span className="text-slate-600 select-none text-[10px] w-20 shrink-0">
+                  {log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : ''}
+                </span>
+                <div className="break-all flex-1">{formatLogLine(log)}</div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Terminal Command Input Prompt */}
+        <div className="flex items-center gap-2 bg-[#090e18] border-t border-[var(--border-subtle)] px-3 py-2.5">
+          <div className="text-emerald-400 font-mono pl-1 text-sm select-none font-bold">&gt;</div>
+          <input
+            type="text"
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type an in-game console command (e.g. setaccesslevel Achira admin, save, help)..."
+            className="flex-1 bg-transparent border-none outline-none text-slate-100 font-mono text-xs px-2"
+            autoFocus
+          />
+          <button
+            onClick={() => handleSend()}
+            disabled={sending || !command.trim()}
+            className="btn btn-primary btn-sm px-4"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Send</span>
+          </button>
+        </div>
       </div>
     </div>
   );

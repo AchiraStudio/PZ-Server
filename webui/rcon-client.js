@@ -29,7 +29,7 @@ class RconClient extends EventEmitter {
     this.connecting = true;
 
     this.socket = new net.Socket();
-    this.socket.setTimeout(this.timeout);
+    this.socket.setKeepAlive(true, 15000);
 
     this.socket.on('connect', () => {
       this.connecting = false;
@@ -44,10 +44,6 @@ class RconClient extends EventEmitter {
 
     this.socket.on('error', (err) => {
       this.emit('error', err);
-    });
-
-    this.socket.on('timeout', () => {
-      if (this.socket) this.socket.destroy();
     });
 
     this.socket.on('close', () => {
@@ -86,8 +82,22 @@ class RconClient extends EventEmitter {
 
   send(command) {
     return new Promise((resolve, reject) => {
+      // If not authenticated, attempt connect and wait briefly
       if (!this.connected || !this.authenticated) {
-        return reject(new Error('RCON is not connected or authenticated'));
+        if (!this.connecting) {
+          this.connect();
+        }
+        const authTimer = setTimeout(() => {
+          this.removeListener('authenticated', onAuth);
+          reject(new Error('RCON not ready (server booting or starting)'));
+        }, 5000);
+
+        const onAuth = () => {
+          clearTimeout(authTimer);
+          this.send(command).then(resolve).catch(reject);
+        };
+        this.once('authenticated', onAuth);
+        return;
       }
 
       const id = this.reqId++;
@@ -108,9 +118,16 @@ class RconClient extends EventEmitter {
         }
       });
 
-      this.socket.write(packet);
+      try {
+        this.socket.write(packet);
+      } catch (err) {
+        clearTimeout(timer);
+        this.pendingRequests.delete(id);
+        reject(err);
+      }
     });
   }
+
 
   _createPacket(id, type, body) {
     const bodyBuffer = Buffer.from(body, 'utf8');

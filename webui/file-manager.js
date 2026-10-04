@@ -8,8 +8,12 @@ class FileManager {
 
   // Security: Prevent directory traversal outside baseDir
   resolveSafePath(userPath = '') {
-    const safePath = path.resolve(this.baseDir, userPath.replace(/^(\.\.(\/|\\|$))+/, ''));
-    if (!safePath.startsWith(this.baseDir)) {
+    // Normalize path separators and remove any leading / or \
+    let clean = (userPath || '').toString().trim().replace(/\\/g, '/');
+    // Strip leading slashes so path.resolve doesn't jump to filesystem root
+    clean = clean.replace(/^\/+/, '');
+    const safePath = path.resolve(this.baseDir, clean);
+    if (safePath !== this.baseDir && !safePath.startsWith(this.baseDir + path.sep)) {
       throw new Error('Access denied: path outside data directory');
     }
     return safePath;
@@ -17,8 +21,9 @@ class FileManager {
 
   getRelativePath(fullPath) {
     const rel = path.relative(this.baseDir, fullPath).replace(/\\/g, '/');
-    return rel ? `/${rel}` : '/';
+    return (!rel || rel === '.') ? '/' : `/${rel}`;
   }
+
 
   async list(userPath = '') {
     const targetDir = this.resolveSafePath(userPath);
@@ -104,6 +109,20 @@ class FileManager {
     await fs.promises.mkdir(targetPath, { recursive: true });
     return { success: true };
   }
+
+  async createFile(userPath) {
+    const targetPath = this.resolveSafePath(userPath);
+    if (fs.existsSync(targetPath)) {
+      throw new Error('File already exists');
+    }
+    const parentDir = path.dirname(targetPath);
+    if (!fs.existsSync(parentDir)) {
+      await fs.promises.mkdir(parentDir, { recursive: true });
+    }
+    await fs.promises.writeFile(targetPath, '', 'utf8');
+    return { success: true, path: this.getRelativePath(targetPath) };
+  }
+
 
   async delete(userPath) {
     const targetPath = this.resolveSafePath(userPath);

@@ -6,10 +6,13 @@ ENV NODE_ENV=production
 ENV WEBUI_PORT=5011
 
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm install
 
 COPY . .
+RUN npm run build
+RUN npm prune --omit=dev
 
 EXPOSE 5011
 
 CMD ["node", "server.js"]
+

@@ -220,7 +220,7 @@ class PZManager {
     this.addLog(`> ${cmd}`, 'input');
 
     // 1. Priority: RCON
-    if (this.rcon && this.rcon.authenticated) {
+    if (this.rcon) {
       try {
         const reply = await this.rcon.send(cmd);
         if (reply && reply.trim()) {
@@ -228,7 +228,7 @@ class PZManager {
         }
         return { success: true, reply };
       } catch (err) {
-        this.addLog(`[RCON Error] ${err.message}`, 'error');
+        this.addLog(`[Console] ${err.message}`, 'supervisor');
         return { success: false, error: err.message };
       }
     }
@@ -239,9 +239,10 @@ class PZManager {
       return { success: true };
     }
 
-    this.addLog('[Supervisor] Console is not ready yet (waiting for server to finish booting up and RCON to connect).', 'supervisor');
+    this.addLog('[Supervisor] Console is not ready yet.', 'supervisor');
     return { success: false, message: 'Console is not connected yet.' };
   }
+
 
   async startServer() {
     if (this.docker.hasSocket) {

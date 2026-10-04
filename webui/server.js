@@ -700,6 +700,16 @@ app.post('/api/files/mkdir', async (req, res) => {
   }
 });
 
+app.post('/api/files/create-file', async (req, res) => {
+  try {
+    const result = await fileManager.createFile(req.body.path);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+
 app.delete('/api/files', async (req, res) => {
   try {
     const result = await fileManager.delete(req.query.path);
@@ -757,15 +767,23 @@ wss.on('connection', (ws) => {
 });
 
 // Serve frontend static files
-app.use(express.static(path.join(__dirname, 'public')));
+const distDir = path.join(__dirname, 'dist');
+const publicDir = path.join(__dirname, 'public');
+const staticDir = fs.existsSync(distDir) ? distDir : publicDir;
+app.use(express.static(staticDir));
 
 // Catch-all for SPA client routing
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ error: 'Endpoint not found' });
   }
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  const indexFile = path.join(staticDir, 'index.html');
+  if (fs.existsSync(indexFile)) {
+    return res.sendFile(indexFile);
+  }
+  res.sendFile(path.join(publicDir, 'index.html'));
 });
+
 
 // Start listener
 server.listen(PORT, '0.0.0.0', () => {

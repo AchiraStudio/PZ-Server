@@ -56,6 +56,7 @@ class PZManager {
 
     for (const line of lines) {
       if (!line && lines.length > 1) continue;
+      console.log(`[${source.toUpperCase()}] ${line}`);
       const logEntry = {
         timestamp,
         source,

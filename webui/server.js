@@ -719,6 +719,23 @@ app.delete('/api/files', async (req, res) => {
   }
 });
 
+app.post('/api/files/batch-delete', async (req, res) => {
+  const { paths } = req.body;
+  if (!Array.isArray(paths) || paths.length === 0) {
+    return res.status(400).json({ error: 'Array of paths required' });
+  }
+  const results = [];
+  for (const p of paths) {
+    try {
+      await fileManager.delete(p);
+      results.push({ path: p, success: true });
+    } catch (err) {
+      results.push({ path: p, success: false, error: err.message });
+    }
+  }
+  res.json({ success: true, count: results.filter(r => r.success).length, results });
+});
+
 app.post('/api/files/rename', async (req, res) => {
   const { oldPath, newPath } = req.body;
   try {

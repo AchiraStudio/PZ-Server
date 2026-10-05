@@ -96,6 +96,7 @@ export const filesApi = {
   createFile: (filePath) => request('/files/create-file', { method: 'POST', body: { path: filePath } }),
   mkdir: (dirPath) => request('/files/mkdir', { method: 'POST', body: { path: dirPath } }),
   delete: (targetPath) => request(`/files?path=${encodeURIComponent(targetPath)}`, { method: 'DELETE' }),
+  batchDelete: (paths) => request('/files/batch-delete', { method: 'POST', body: { paths } }),
   rename: (oldPath, newPath) => request('/files/rename', { method: 'POST', body: { oldPath, newPath } }),
   upload: (file, targetDir = '') => {
     const formData = new FormData();

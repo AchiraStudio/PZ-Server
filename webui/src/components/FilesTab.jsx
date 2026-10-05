@@ -18,7 +18,10 @@ import {
   AlertCircle,
   Archive,
   Database,
-  Check
+  Check,
+  CheckSquare,
+  Square,
+  AlertTriangle
 } from 'lucide-react';
 import { filesApi } from '../services/api';
 
@@ -27,22 +30,36 @@ export default function FilesTab() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [notice, setNotice] = useState(null);
+
+  // Multi-Selection State for Batch Actions
+  const [selectedPaths, setSelectedPaths] = useState(new Set());
 
   // Editor Modal State
   const [editingFile, setEditingFile] = useState(null); // { path, name, content, originalContent }
   const [savingFile, setSavingFile] = useState(false);
+  const [deletingInEditor, setDeletingInEditor] = useState(false);
   const [editorNotice, setEditorNotice] = useState(null);
 
   // Action Modals State
   const [createModal, setCreateModal] = useState({ open: false, type: 'file', name: '' });
   const [renameModal, setRenameModal] = useState({ open: false, oldPath: '', newName: '' });
-  const [deleteModal, setDeleteModal] = useState({ open: false, targetPath: '', isDir: false });
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
+    targetPath: '',
+    name: '',
+    isDir: false,
+    isBatch: false,
+    batchPaths: []
+  });
+
   const fileInputRef = useRef(null);
 
   // Load directory items
   const loadDirectory = async (pathToGo = currentPath) => {
     setLoading(true);
     setError(null);
+    setSelectedPaths(new Set());
     try {
       const data = await filesApi.list(pathToGo);
       setItems(data.items || []);
@@ -108,6 +125,25 @@ export default function FilesTab() {
     }
   };
 
+  // Delete currently open file in editor
+  const handleDeleteCurrentEditingFile = async () => {
+    if (!editingFile) return;
+    if (!confirm(`Are you sure you want to permanently delete "${editingFile.name}"?`)) return;
+
+    setDeletingInEditor(true);
+    try {
+      await filesApi.delete(editingFile.path);
+      setEditingFile(null);
+      setNotice(`Deleted "${editingFile.name}"`);
+      setTimeout(() => setNotice(null), 3500);
+      loadDirectory(currentPath);
+    } catch (err) {
+      alert(`Delete failed: ${err.message}`);
+    } finally {
+      setDeletingInEditor(false);
+    }
+  };
+
   // Close editor
   const closeEditor = () => {
     if (editingFile && editingFile.content !== editingFile.originalContent) {
@@ -116,6 +152,71 @@ export default function FilesTab() {
       }
     }
     setEditingFile(null);
+  };
+
+  // Multi-selection helpers
+  const toggleSelect = (path) => {
+    const next = new Set(selectedPaths);
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    setSelectedPaths(next);
+  };
+
+  const isAllSelected = items.length > 0 && items.every((i) => selectedPaths.has(i.path));
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedPaths(new Set());
+    } else {
+      setSelectedPaths(new Set(items.map((i) => i.path)));
+    }
+  };
+
+  // Open single delete modal
+  const openSingleDeleteModal = (item) => {
+    setDeleteModal({
+      open: true,
+      targetPath: item.path,
+      name: item.name,
+      isDir: item.isDir,
+      isBatch: false,
+      batchPaths: []
+    });
+  };
+
+  // Open batch delete modal
+  const openBatchDeleteModal = () => {
+    if (selectedPaths.size === 0) return;
+    const pathsArray = Array.from(selectedPaths);
+    const hasDir = items.some((i) => selectedPaths.has(i.path) && i.isDir);
+
+    setDeleteModal({
+      open: true,
+      targetPath: '',
+      name: `${pathsArray.length} items`,
+      isDir: hasDir,
+      isBatch: true,
+      batchPaths: pathsArray
+    });
+  };
+
+  // Delete item or batch items
+  const handleDeleteConfirm = async () => {
+    try {
+      if (deleteModal.isBatch) {
+        await filesApi.batchDelete(deleteModal.batchPaths);
+        setNotice(`Successfully deleted ${deleteModal.batchPaths.length} item(s)!`);
+      } else {
+        await filesApi.delete(deleteModal.targetPath);
+        setNotice(`Successfully deleted ${deleteModal.isDir ? 'directory' : 'file'} "${deleteModal.name}"!`);
+      }
+      setTimeout(() => setNotice(null), 3500);
+      setDeleteModal({ open: false, targetPath: '', name: '', isDir: false, isBatch: false, batchPaths: [] });
+      setSelectedPaths(new Set());
+      loadDirectory(currentPath);
+    } catch (err) {
+      alert(`Failed to delete: ${err.message}`);
+    }
   };
 
   // Create file or folder
@@ -128,9 +229,12 @@ export default function FilesTab() {
     try {
       if (createModal.type === 'folder') {
         await filesApi.mkdir(fullPath);
+        setNotice(`Created folder "${name}"`);
       } else {
         await filesApi.createFile(fullPath);
+        setNotice(`Created file "${name}"`);
       }
+      setTimeout(() => setNotice(null), 3500);
       setCreateModal({ open: false, type: 'file', name: '' });
       await loadDirectory(currentPath);
 
@@ -154,20 +258,11 @@ export default function FilesTab() {
     try {
       await filesApi.rename(renameModal.oldPath, newPath);
       setRenameModal({ open: false, oldPath: '', newName: '' });
+      setNotice(`Renamed to "${newName}"`);
+      setTimeout(() => setNotice(null), 3500);
       loadDirectory(currentPath);
     } catch (err) {
       alert(`Failed to rename: ${err.message}`);
-    }
-  };
-
-  // Delete item
-  const handleDeleteConfirm = async () => {
-    try {
-      await filesApi.delete(deleteModal.targetPath);
-      setDeleteModal({ open: false, targetPath: '', isDir: false });
-      loadDirectory(currentPath);
-    } catch (err) {
-      alert(`Failed to delete: ${err.message}`);
     }
   };
 
@@ -179,6 +274,8 @@ export default function FilesTab() {
     setLoading(true);
     try {
       await filesApi.upload(file, currentPath);
+      setNotice(`Uploaded "${file.name}"`);
+      setTimeout(() => setNotice(null), 3500);
       loadDirectory(currentPath);
     } catch (err) {
       alert(`Upload failed: ${err.message}`);
@@ -238,8 +335,8 @@ export default function FilesTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Top Shortcuts Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] p-3 rounded-xl">
+      {/* Top Shortcuts & Primary Actions Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] p-3 rounded-xl shadow-sm">
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
           <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold mr-1">Shortcuts:</span>
           {shortcuts.map((sc) => (
@@ -247,9 +344,7 @@ export default function FilesTab() {
               key={sc.path}
               onClick={() => loadDirectory(sc.path)}
               className={`btn btn-sm text-xs py-1 px-2.5 ${
-                currentPath === sc.path
-                  ? 'btn-primary'
-                  : 'btn-secondary hover:border-emerald-500/40'
+                currentPath === sc.path ? 'btn-primary font-bold shadow-glow' : 'btn-secondary hover:border-emerald-500/40'
               }`}
             >
               {sc.label}
@@ -259,6 +354,13 @@ export default function FilesTab() {
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2 ml-auto">
+          {notice && (
+            <span className="text-xs text-emerald-400 font-medium flex items-center gap-1.5 bg-emerald-950/40 border border-emerald-500/30 px-3 py-1 rounded-lg animate-fadeIn">
+              <Check className="w-3.5 h-3.5" />
+              {notice}
+            </span>
+          )}
+
           <button
             onClick={() => setCreateModal({ open: true, type: 'file', name: '' })}
             className="btn btn-secondary btn-sm"
@@ -300,22 +402,50 @@ export default function FilesTab() {
         </div>
       </div>
 
-      {/* Breadcrumb Navigation Path */}
-      <div className="flex items-center gap-1.5 bg-[var(--bg-primary)] border border-[var(--border-subtle)] px-4 py-2 rounded-xl text-xs font-mono">
-        <Home className="w-3.5 h-3.5 text-slate-500" />
-        {breadcrumbs.map((b, idx) => (
-          <React.Fragment key={b.path}>
-            {idx > 0 && <ChevronRight className="w-3 h-3 text-slate-600" />}
+      {/* Breadcrumb Navigation Path & Bulk Actions Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-[var(--bg-primary)] border border-[var(--border-subtle)] px-4 py-2.5 rounded-xl text-xs">
+        {/* Left: Breadcrumbs */}
+        <div className="flex items-center gap-1.5 font-mono">
+          <Home className="w-3.5 h-3.5 text-slate-500" />
+          {breadcrumbs.map((b, idx) => (
+            <React.Fragment key={b.path}>
+              {idx > 0 && <ChevronRight className="w-3 h-3 text-slate-600" />}
+              <button
+                onClick={() => loadDirectory(b.path)}
+                className={`hover:text-emerald-400 transition-colors ${
+                  idx === breadcrumbs.length - 1 ? 'text-emerald-400 font-bold' : 'text-slate-400'
+                }`}
+              >
+                {b.label}
+              </button>
+            </React.Fragment>
+          ))}
+        </div>
+
+        {/* Right: Multi-select Action Bar */}
+        {selectedPaths.size > 0 && (
+          <div className="flex items-center gap-2 bg-rose-950/30 border border-rose-500/30 px-3 py-1 rounded-lg animate-fadeIn">
+            <span className="text-xs text-rose-300 font-semibold">
+              {selectedPaths.size} item(s) selected
+            </span>
+
             <button
-              onClick={() => loadDirectory(b.path)}
-              className={`hover:text-emerald-400 transition-colors ${
-                idx === breadcrumbs.length - 1 ? 'text-emerald-400 font-bold' : 'text-slate-400'
-              }`}
+              onClick={() => setSelectedPaths(new Set())}
+              className="text-[11px] text-slate-400 hover:text-white px-2 py-0.5 rounded"
             >
-              {b.label}
+              Deselect All
             </button>
-          </React.Fragment>
-        ))}
+
+            <button
+              onClick={openBatchDeleteModal}
+              className="btn btn-danger btn-sm text-xs py-1 px-2.5 flex items-center gap-1.5 font-bold shadow-sm"
+              title="Delete all selected files and folders"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected ({selectedPaths.size})</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Error Alert */}
@@ -331,10 +461,19 @@ export default function FilesTab() {
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-[var(--border-subtle)] bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider text-[11px]">
-              <th className="py-2.5 px-4">Name</th>
+              <th className="py-2.5 px-3 w-10 text-center">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected}
+                  onChange={toggleSelectAll}
+                  className="rounded border-slate-700 bg-slate-900 text-emerald-500 cursor-pointer"
+                  title="Select / Deselect All"
+                />
+              </th>
+              <th className="py-2.5 px-3">Name</th>
               <th className="py-2.5 px-4 w-28">Size</th>
               <th className="py-2.5 px-4 w-44">Last Modified</th>
-              <th className="py-2.5 px-4 w-32 text-right">Actions</th>
+              <th className="py-2.5 px-4 w-36 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border-subtle)]">
@@ -347,7 +486,8 @@ export default function FilesTab() {
                 }}
                 className="hover:bg-white/[0.03] cursor-pointer text-slate-400"
               >
-                <td colSpan={4} className="py-2.5 px-4 flex items-center gap-2">
+                <td className="py-2.5 px-3"></td>
+                <td colSpan={4} className="py-2.5 px-3 flex items-center gap-2">
                   <Folder className="w-4 h-4 text-amber-400/60" />
                   <span className="font-mono text-xs">.. (Parent Directory)</span>
                 </td>
@@ -356,83 +496,109 @@ export default function FilesTab() {
 
             {items.length === 0 && !loading ? (
               <tr>
-                <td colSpan={4} className="py-8 text-center text-slate-500">
+                <td colSpan={5} className="py-12 text-center text-slate-500">
                   This directory is empty.
                 </td>
               </tr>
             ) : (
-              items.map((item) => (
-                <tr
-                  key={item.path}
-                  className="hover:bg-white/[0.03] transition-colors group"
-                >
-                  <td className="py-2.5 px-4">
-                    <div
-                      onClick={() => {
-                        if (item.isDir) {
-                          loadDirectory(item.path);
-                        } else if (isEditable(item.name)) {
-                          openEditor(item.path);
-                        }
-                      }}
-                      className="flex items-center gap-2.5 cursor-pointer"
-                    >
-                      {getFileIcon(item)}
-                      <span className={`font-mono text-slate-200 group-hover:text-emerald-400 transition-colors ${
-                        item.isDir ? 'font-semibold' : ''
-                      }`}>
-                        {item.name}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="py-2.5 px-4 font-mono text-slate-400">
-                    {item.isDir ? '<DIR>' : formatSize(item.size)}
-                  </td>
-                  <td className="py-2.5 px-4 text-slate-400">
-                    {item.mtime ? new Date(item.mtime).toLocaleString() : '-'}
-                  </td>
-                  <td className="py-2.5 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                      {!item.isDir && isEditable(item.name) && (
+              items.map((item) => {
+                const isSelected = selectedPaths.has(item.path);
+
+                return (
+                  <tr
+                    key={item.path}
+                    className={`hover:bg-white/[0.03] transition-colors group ${
+                      isSelected ? 'bg-emerald-500/5' : ''
+                    }`}
+                  >
+                    {/* Checkbox */}
+                    <td className="py-2.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(item.path)}
+                        className="rounded border-slate-700 bg-slate-900 text-emerald-500 cursor-pointer"
+                      />
+                    </td>
+
+                    {/* Name & Icon */}
+                    <td className="py-2.5 px-3">
+                      <div
+                        onClick={() => {
+                          if (item.isDir) {
+                            loadDirectory(item.path);
+                          } else if (isEditable(item.name)) {
+                            openEditor(item.path);
+                          }
+                        }}
+                        className="flex items-center gap-2.5 cursor-pointer"
+                      >
+                        {getFileIcon(item)}
+                        <span
+                          className={`font-mono text-slate-200 group-hover:text-emerald-400 transition-colors truncate ${
+                            item.isDir ? 'font-semibold' : ''
+                          }`}
+                        >
+                          {item.name}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Size */}
+                    <td className="py-2.5 px-4 font-mono text-slate-400">
+                      {item.isDir ? '<DIR>' : formatSize(item.size)}
+                    </td>
+
+                    {/* Last Modified */}
+                    <td className="py-2.5 px-4 text-slate-400">
+                      {item.mtime ? new Date(item.mtime).toLocaleString() : '-'}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="py-2.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        {!item.isDir && isEditable(item.name) && (
+                          <button
+                            onClick={() => openEditor(item.path)}
+                            className="p-1 hover:text-emerald-400 text-slate-400 rounded hover:bg-white/5"
+                            title="Edit File"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                        {!item.isDir && (
+                          <a
+                            href={filesApi.getDownloadUrl(item.path)}
+                            download={item.name}
+                            className="p-1 hover:text-cyan-400 text-slate-400 rounded hover:bg-white/5"
+                            title="Download File"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+
                         <button
-                          onClick={() => openEditor(item.path)}
-                          className="p-1 hover:text-emerald-400 text-slate-400 rounded"
-                          title="Edit File"
+                          onClick={() => setRenameModal({ open: true, oldPath: item.path, newName: item.name })}
+                          className="p-1 hover:text-amber-400 text-slate-400 rounded hover:bg-white/5"
+                          title="Rename"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
-                      )}
 
-                      {!item.isDir && (
-                        <a
-                          href={filesApi.getDownloadUrl(item.path)}
-                          download={item.name}
-                          className="p-1 hover:text-cyan-400 text-slate-400 rounded"
-                          title="Download File"
+                        {/* DELETE BUTTON (Clear & Red Tint on Hover) */}
+                        <button
+                          onClick={() => openSingleDeleteModal(item)}
+                          className="p-1 hover:text-rose-400 text-slate-400 rounded hover:bg-rose-950/40 transition-colors"
+                          title={`Delete ${item.isDir ? 'Folder' : 'File'}`}
                         >
-                          <Download className="w-3.5 h-3.5" />
-                        </a>
-                      )}
-
-                      <button
-                        onClick={() => setRenameModal({ open: true, oldPath: item.path, newName: item.name })}
-                        className="p-1 hover:text-amber-400 text-slate-400 rounded"
-                        title="Rename"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-
-                      <button
-                        onClick={() => setDeleteModal({ open: true, targetPath: item.path, isDir: item.isDir })}
-                        className="p-1 hover:text-rose-400 text-slate-400 rounded"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -467,11 +633,22 @@ export default function FilesTab() {
                 <button
                   onClick={saveCurrentFile}
                   disabled={savingFile}
-                  className="btn btn-primary btn-sm"
+                  className="btn btn-primary btn-sm font-semibold"
                   title="Save (Ctrl+S)"
                 >
                   <Save className="w-3.5 h-3.5" />
                   <span>{savingFile ? 'Saving...' : 'Save (Ctrl+S)'}</span>
+                </button>
+
+                {/* Direct Delete from Editor */}
+                <button
+                  onClick={handleDeleteCurrentEditingFile}
+                  disabled={deletingInEditor}
+                  className="btn btn-danger btn-sm text-xs font-semibold"
+                  title="Delete this file"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{deletingInEditor ? 'Deleting...' : 'Delete File'}</span>
                 </button>
 
                 <button
@@ -497,7 +674,7 @@ export default function FilesTab() {
             {/* Editor Footer */}
             <div className="px-4 py-2 border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)] text-[11px] text-slate-400 flex items-center justify-between">
               <span>Lines: {editingFile.content.split('\n').length}</span>
-              <span className="text-slate-500 font-mono">UTF-8 • Project Zomboid Config</span>
+              <span className="text-slate-500 font-mono">UTF-8 • Project Zomboid Dedicated Server File</span>
             </div>
           </div>
         </div>
@@ -567,29 +744,54 @@ export default function FilesTab() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal (Supports both single item and batch delete) */}
       {deleteModal.open && (
         <div className="modal-overlay">
-          <div className="modal-content max-w-md p-5">
+          <div className="modal-content max-w-md p-5 border border-rose-500/30">
             <h3 className="text-base font-bold text-rose-400 mb-2 flex items-center gap-2">
-              <AlertCircle className="w-5 h-5" />
-              Confirm Deletion
+              <AlertTriangle className="w-5 h-5 text-rose-400" />
+              <span>Confirm Permanent Deletion</span>
             </h3>
-            <p className="text-xs text-slate-300 mb-4">
-              Are you sure you want to delete this {deleteModal.isDir ? 'directory and all its contents' : 'file'}?
-              <br />
-              <span className="font-mono text-rose-300 break-all mt-1 block">{deleteModal.targetPath}</span>
-            </p>
+
+            {deleteModal.isBatch ? (
+              <div>
+                <p className="text-xs text-slate-300 mb-2">
+                  Are you sure you want to permanently delete the following <span className="font-bold text-rose-300">{deleteModal.batchPaths.length} items</span>?
+                </p>
+                {deleteModal.isDir && (
+                  <p className="text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 p-2 rounded mb-3">
+                    Warning: Some selected items are folders. All contents inside them will also be deleted!
+                  </p>
+                )}
+                <div className="max-h-36 overflow-y-auto bg-black/30 border border-white/10 rounded p-2 text-xs font-mono text-slate-300 divide-y divide-white/5 mb-4">
+                  {deleteModal.batchPaths.map((p) => (
+                    <div key={p} className="py-1 truncate">
+                      {p}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p className="text-xs text-slate-300 mb-2">
+                  Are you sure you want to permanently delete this {deleteModal.isDir ? 'directory and all its contents' : 'file'}?
+                </p>
+                <div className="p-2.5 rounded bg-black/30 border border-white/10 font-mono text-xs text-rose-300 break-all mb-4">
+                  {deleteModal.targetPath}
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-2">
               <button
-                onClick={() => setDeleteModal({ open: false, targetPath: '', isDir: false })}
+                onClick={() => setDeleteModal({ open: false, targetPath: '', name: '', isDir: false, isBatch: false, batchPaths: [] })}
                 className="btn btn-secondary btn-sm"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteConfirm}
-                className="btn btn-danger btn-sm"
+                className="btn btn-danger btn-sm font-bold shadow-sm"
               >
                 Delete Permanently
               </button>

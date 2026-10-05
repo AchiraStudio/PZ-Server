@@ -619,3 +619,21 @@ header nav button {
 table tr:hover td {
   background-color: rgba(255, 255, 255, 0.02);
 }
+
+/* Drag and drop load order styling */
+.mod-item-row {
+  transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+  user-select: none;
+}
+.mod-item-row.is-dragging {
+  opacity: 0.35;
+  border-style: dashed;
+  border-color: var(--accent-emerald);
+  background-color: rgba(16, 185, 129, 0.05);
+}
+.mod-item-row.is-drag-over {
+  border-color: var(--accent-cyan);
+  background-color: rgba(6, 182, 212, 0.1);
+  transform: translateY(2px);
+}
+

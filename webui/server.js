@@ -478,7 +478,7 @@ app.post('/api/mods/parse-bulk', async (req, res) => {
     // If workshop IDs are found, fetch their details so user can verify title & Mod IDs
     let items = [];
     if (parsed.workshopIds.length > 0) {
-      items = await steamWorkshop.batchFetchModDetails(parsed.workshopIds.slice(0, 50), 5);
+      items = await steamWorkshop.batchFetchModDetails(parsed.workshopIds.slice(0, 100), 5);
     }
     res.json({
       workshopIds: parsed.workshopIds,

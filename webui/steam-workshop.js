@@ -274,33 +274,73 @@ function parseBulkText(text) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
 
-    // Check for WorkshopItems=...
+    // 1. Check for WorkshopItems=...
     if (/^WorkshopItems\s*=/i.test(trimmed)) {
       const val = trimmed.replace(/^WorkshopItems\s*=\s*/i, '');
-      val.split(';').map(s => s.trim()).filter(Boolean).forEach(id => workshopIds.add(id));
+      val.split(';').map(s => s.trim()).filter(Boolean).forEach(id => {
+        const cleanId = extractId(id) || id;
+        if (/^\d{6,}$/.test(cleanId)) workshopIds.add(cleanId);
+      });
       continue;
     }
 
-    // Check for Mods=...
+    // 2. Check for Mods=...
     if (/^Mods\s*=/i.test(trimmed)) {
       const val = trimmed.replace(/^Mods\s*=\s*/i, '');
-      val.split(';').map(s => s.trim()).filter(Boolean).forEach(m => modIds.add(m));
+      val.split(';').map(s => s.trim()).filter(Boolean).forEach(m => {
+        if (m.length >= 2 && !/^(required|recommended|optional|none)$/i.test(m)) {
+          modIds.add(m);
+        }
+      });
       continue;
     }
 
-    // Check for URLs like https://steamcommunity.com/sharedfiles/filedetails/?id=123456
-    const urlMatches = [...trimmed.matchAll(/id=(\d+)/gi)].map(m => m[1]);
+    // 3. Check for labeled Workshop ID: 123456
+    const wsLabelMatch = trimmed.match(/Workshop\s*(?:ID|-ID)?\s*[:=]\s*(\d{6,})/i);
+    if (wsLabelMatch) {
+      workshopIds.add(wsLabelMatch[1]);
+      continue;
+    }
+
+    // 4. Check for labeled Mod ID: MyModName
+    const modLabelMatch = trimmed.match(/Mod\s*(?:ID|-ID)?\s*[:=]\s*([a-zA-Z0-9_\-+.,;\s]+)/i);
+    if (modLabelMatch) {
+      const parts = modLabelMatch[1].split(/[,;]/);
+      for (let p of parts) {
+        p = p.trim().split(/\s+/)[0];
+        if (p && p.length >= 2 && !/^(required|recommended|optional|none|na|n\/a)$/i.test(p)) {
+          modIds.add(p);
+        }
+      }
+      continue;
+    }
+
+    // 5. Check for Steam Workshop URLs:
+    // Matches https://steamcommunity.com/sharedfiles/filedetails/?id=2875848298
+    // or https://steamcommunity.com/workshop/filedetails/?id=2875848298
+    // or ?id=2875848298
+    const urlMatches = [...trimmed.matchAll(/(?:id=|\/item\/)(\d{6,})/gi)].map(m => m[1]);
     if (urlMatches.length > 0) {
       urlMatches.forEach(id => workshopIds.add(id));
       continue;
     }
 
-    // If comma or semicolon separated tokens
+    // 6. Check if the line is purely a standalone Workshop ID number
+    if (/^\d{6,}$/.test(trimmed)) {
+      workshopIds.add(trimmed);
+      continue;
+    }
+
+    // 7. Semicolon or comma delimited tokens
     const tokens = trimmed.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
     for (const t of tokens) {
       if (/^\d{6,}$/.test(t)) {
         workshopIds.add(t);
-      } else if (t.length >= 2) {
+      } else if (
+        t.length >= 2 &&
+        !/^(workshop|mod|id|item|items|mods|link|links|url|urls|http|https|steam|filedetails)$/i.test(t) &&
+        /^[a-zA-Z0-9_\-+]+$/.test(t)
+      ) {
         modIds.add(t);
       }
     }

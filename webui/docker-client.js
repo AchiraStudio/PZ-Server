@@ -5,6 +5,9 @@ class DockerClient {
   constructor(socketPath = '/var/run/docker.sock') {
     this.socketPath = socketPath;
     this.hasSocket = fs.existsSync(socketPath);
+    this.logStreamReq = null;
+    this.shouldStream = true;
+    this.logStreamTimer = null;
   }
 
   request(method, path, body = null) {
@@ -51,9 +54,24 @@ class DockerClient {
     });
   }
 
+  stopLogStream() {
+    this.shouldStream = false;
+    if (this.logStreamTimer) {
+      clearTimeout(this.logStreamTimer);
+      this.logStreamTimer = null;
+    }
+    if (this.logStreamReq) {
+      try {
+        this.logStreamReq.destroy();
+      } catch (e) {}
+      this.logStreamReq = null;
+    }
+  }
+
   // Stream logs continuously from container
   streamLogs(containerName, onLine) {
     if (!this.hasSocket) return null;
+    this.shouldStream = true;
 
     const path = `/containers/${containerName}/logs?follow=1&stdout=1&stderr=1&tail=150&timestamps=0`;
     const options = {
@@ -68,7 +86,6 @@ class DockerClient {
       res.on('data', (chunk) => {
         // Docker multiplexed stream header: 8 bytes per frame
         // [STREAM_TYPE (1 byte), 0, 0, 0, SIZE (4 bytes big-endian)]
-        // Strip out the 8-byte frame header if present
         let text = '';
         let offset = 0;
         
@@ -95,16 +112,19 @@ class DockerClient {
       });
 
       res.on('end', () => {
-        // Retry connection after 5 seconds if container is still running
-        setTimeout(() => this.streamLogs(containerName, onLine), 5000);
+        if (this.shouldStream) {
+          this.logStreamTimer = setTimeout(() => this.streamLogs(containerName, onLine), 5000);
+        }
       });
     });
 
     req.on('error', (err) => {
-      // Container might be down or rebooting, retry after delay
-      setTimeout(() => this.streamLogs(containerName, onLine), 5000);
+      if (this.shouldStream) {
+        this.logStreamTimer = setTimeout(() => this.streamLogs(containerName, onLine), 5000);
+      }
     });
 
+    this.logStreamReq = req;
     req.end();
     return req;
   }
@@ -151,6 +171,10 @@ class DockerClient {
 
   stop(containerName) {
     return this.request('POST', `/containers/${containerName}/stop?t=15`);
+  }
+
+  remove(containerName) {
+    return this.request('DELETE', `/containers/${containerName}?force=true&v=false`);
   }
 
   restart(containerName) {

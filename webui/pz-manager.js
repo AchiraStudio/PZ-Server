@@ -68,8 +68,7 @@ class PZManager {
             this.broadcast({ type: 'status', status: this.status });
             setTimeout(async () => {
               if (!this.intentionalStop) {
-                await this.docker.start(this.containerName).catch(() => {});
-                setTimeout(() => this.rcon.connect(), 3000);
+                await this.startServer().catch(() => {});
               }
             }, 5000);
           }
@@ -292,7 +291,14 @@ class PZManager {
 
     if (this.docker.hasSocket) {
       try {
+        const info = await this.docker.inspect(this.containerName).catch(() => null);
+        if (info?.State?.Dead || info?.State?.Status === 'removing') {
+          this.addLog(`[Supervisor] Warning: Container was in dead/removing state. Cleaning up dead container stub...`, 'supervisor');
+          await this.docker.remove(this.containerName).catch(() => {});
+        }
+
         await this.docker.start(this.containerName);
+        this.docker.streamLogs(this.containerName, (line) => this.addLog(line, 'server'));
         setTimeout(() => this.rcon.connect(), 4000);
         return { success: true };
       } catch (err) {
@@ -309,25 +315,32 @@ class PZManager {
     this.intentionalStop = true;
     this.status = 'stopping';
     this.broadcast({ type: 'status', status: this.status });
-    this.addLog('[Supervisor] Stopping server gracefully (sending in-game broadcast, saving world, then shutting down)...', 'supervisor');
+    this.addLog('[Supervisor] Stopping server gracefully (broadcasting to survivors, saving world state, then shutting down)...', 'supervisor');
 
     if (this.rcon && this.rcon.authenticated) {
       try {
         await this.rcon.send('servermsg "[SERVER] Server is shutting down now."');
         await this.rcon.send('save');
-        setTimeout(() => this.rcon.send('quit').catch(() => {}), 1200);
+        setTimeout(() => this.rcon.send('quit').catch(() => {}), 1000);
       } catch (e) {}
     }
 
+    // Release Docker log stream socket early to prevent overlay2 unmount busy locks
     if (this.docker.hasSocket) {
+      this.docker.stopLogStream();
       try {
         setTimeout(async () => {
-          await this.docker.stop(this.containerName).catch(() => {});
+          try {
+            const info = await this.docker.inspect(this.containerName).catch(() => null);
+            if (info?.State?.Running) {
+              await this.docker.stop(this.containerName).catch(() => {});
+            }
+          } catch (e) {}
           this.rcon.disconnect();
           this.status = 'stopped';
           this.broadcast({ type: 'status', status: this.status });
-          this.addLog('[Supervisor] Container stopped successfully.', 'supervisor');
-        }, 2500);
+          this.addLog('[Supervisor] Dedicated server stopped cleanly.', 'supervisor');
+        }, 3000);
         return { success: true };
       } catch (err) {
         return { success: false, error: err.message };
@@ -356,9 +369,11 @@ class PZManager {
     this.rcon.disconnect();
 
     if (this.docker.hasSocket) {
+      this.docker.stopLogStream();
       try {
         await this.docker.restart(this.containerName);
         this.startTime = Date.now();
+        this.docker.streamLogs(this.containerName, (line) => this.addLog(line, 'server'));
         setTimeout(() => this.rcon.connect(), 4000);
         return { success: true };
       } catch (err) {

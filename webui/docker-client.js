@@ -141,6 +141,10 @@ class DockerClient {
     }
   }
 
+  inspect(containerName) {
+    return this.request('GET', `/containers/${containerName}/json`);
+  }
+
   start(containerName) {
     return this.request('POST', `/containers/${containerName}/start`);
   }

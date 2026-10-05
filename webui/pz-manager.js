@@ -28,6 +28,9 @@ class PZManager {
     });
 
     this.status = 'starting'; // 'stopped', 'installing', 'starting', 'online', 'stopping'
+    this.intentionalStop = false;
+    this.scheduledRestartTimer = null;
+    this.scheduledRestartCountdown = 0;
     this.process = null;
     this.pid = null;
     this.startTime = Date.now();
@@ -40,7 +43,41 @@ class PZManager {
   }
 
   init() {
-    // 1. If running with Docker socket, stream container logs
+    // 0. Immediate container status inspection on boot
+    if (this.docker.hasSocket) {
+      this.docker.inspect(this.containerName).then(info => {
+        if (!info?.State?.Running) {
+          this.status = 'stopped';
+          this.broadcast({ type: 'status', status: this.status });
+        } else {
+          this.status = 'online';
+          this.broadcast({ type: 'status', status: this.status });
+        }
+      }).catch(() => {});
+    }
+
+    // 1. Health check & Crash recovery loop (every 15s)
+    setInterval(async () => {
+      if (this.docker.hasSocket && !this.intentionalStop) {
+        try {
+          const info = await this.docker.inspect(this.containerName);
+          const running = info?.State?.Running;
+          if (!running && (this.status === 'online' || this.status === 'starting')) {
+            this.addLog(`[Supervisor] WARNING: Container ${this.containerName} is not running (ExitCode: ${info?.State?.ExitCode}). Auto-recovering in 5 seconds...`, 'supervisor');
+            this.status = 'starting';
+            this.broadcast({ type: 'status', status: this.status });
+            setTimeout(async () => {
+              if (!this.intentionalStop) {
+                await this.docker.start(this.containerName).catch(() => {});
+                setTimeout(() => this.rcon.connect(), 3000);
+              }
+            }, 5000);
+          }
+        } catch (e) {}
+      }
+    }, 15000);
+
+    // 2. If running with Docker socket, stream container logs
     if (this.docker.hasSocket) {
       console.log(`[Supervisor] Connecting to Docker socket for container: ${this.containerName}...`);
       this.docker.streamLogs(this.containerName, (line) => {
@@ -135,7 +172,10 @@ class PZManager {
       type: 'init',
       status: this.status,
       onlinePlayers: Array.from(this.onlinePlayers),
-      logs: this.logHistory.slice(-500)
+      logs: this.logHistory.slice(-500),
+      countdown: this.scheduledRestartCountdown,
+      countdownReason: this.scheduledRestartReason || '',
+      restartActive: !!this.scheduledRestartTimer
     }));
 
     ws.on('close', () => {
@@ -245,30 +285,37 @@ class PZManager {
 
 
   async startServer() {
+    this.intentionalStop = false;
+    this.status = 'starting';
+    this.broadcast({ type: 'status', status: this.status });
+    this.addLog(`[Supervisor] Starting dedicated server container (${this.containerName})...`, 'supervisor');
+
     if (this.docker.hasSocket) {
       try {
-        this.status = 'starting';
-        this.broadcast({ type: 'status', status: this.status });
-        this.addLog(`[Supervisor] Starting container ${this.containerName}...`, 'supervisor');
         await this.docker.start(this.containerName);
+        setTimeout(() => this.rcon.connect(), 4000);
         return { success: true };
       } catch (err) {
+        this.addLog(`[Supervisor] Failed to start container: ${err.message}`, 'supervisor');
         return { success: false, error: err.message };
       }
     }
 
+    setTimeout(() => this.rcon.connect(), 4000);
     return { success: true };
   }
 
   async stopServer() {
+    this.intentionalStop = true;
     this.status = 'stopping';
     this.broadcast({ type: 'status', status: this.status });
-    this.addLog('[Supervisor] Stopping server gracefully (sending "save" then "quit")...', 'supervisor');
+    this.addLog('[Supervisor] Stopping server gracefully (sending in-game broadcast, saving world, then shutting down)...', 'supervisor');
 
     if (this.rcon && this.rcon.authenticated) {
       try {
+        await this.rcon.send('servermsg "[SERVER] Server is shutting down now."');
         await this.rcon.send('save');
-        setTimeout(() => this.rcon.send('quit').catch(() => {}), 1500);
+        setTimeout(() => this.rcon.send('quit').catch(() => {}), 1200);
       } catch (e) {}
     }
 
@@ -276,41 +323,124 @@ class PZManager {
       try {
         setTimeout(async () => {
           await this.docker.stop(this.containerName).catch(() => {});
+          this.rcon.disconnect();
           this.status = 'stopped';
           this.broadcast({ type: 'status', status: this.status });
-          this.addLog('[Supervisor] Container stopped.', 'supervisor');
-        }, 3000);
+          this.addLog('[Supervisor] Container stopped successfully.', 'supervisor');
+        }, 2500);
         return { success: true };
       } catch (err) {
         return { success: false, error: err.message };
       }
     }
 
+    this.rcon.disconnect();
     this.status = 'stopped';
     this.broadcast({ type: 'status', status: this.status });
     return { success: true };
   }
 
   async restartServer() {
-    this.addLog('[Supervisor] Restarting server container...', 'supervisor');
+    this.intentionalStop = false;
+    this.status = 'starting';
+    this.broadcast({ type: 'status', status: this.status });
+    this.addLog('[Supervisor] Restarting server gracefully (saving world first)...', 'supervisor');
+
     if (this.rcon && this.rcon.authenticated) {
       try {
+        await this.rcon.send('servermsg "[SERVER] Server is restarting now. Please reconnect in a moment."');
         await this.rcon.send('save');
       } catch (e) {}
     }
 
+    this.rcon.disconnect();
+
     if (this.docker.hasSocket) {
       try {
         await this.docker.restart(this.containerName);
-        this.status = 'starting';
-        this.broadcast({ type: 'status', status: this.status });
+        this.startTime = Date.now();
+        setTimeout(() => this.rcon.connect(), 4000);
         return { success: true };
       } catch (err) {
+        this.addLog(`[Supervisor] Failed to restart container: ${err.message}`, 'supervisor');
         return { success: false, error: err.message };
       }
     }
 
+    this.startTime = Date.now();
+    setTimeout(() => this.rcon.connect(), 4000);
     return { success: true };
+  }
+
+  scheduleRestart(seconds = 60, reason = 'Scheduled maintenance') {
+    if (this.scheduledRestartTimer) {
+      clearInterval(this.scheduledRestartTimer);
+    }
+    this.scheduledRestartCountdown = seconds;
+    this.scheduledRestartReason = reason;
+    this.addLog(`[Supervisor] Restart countdown initiated: ${seconds} seconds remaining (${reason})`, 'supervisor');
+    const timeFormatted = seconds >= 60 ? `${Math.round(seconds / 60)} minute(s)` : `${seconds} seconds`;
+    this.broadcastMessage(`[RESTART] Server will restart in ${timeFormatted}: ${reason}`);
+
+    this.broadcast({
+      type: 'restart_countdown',
+      countdown: this.scheduledRestartCountdown,
+      reason: this.scheduledRestartReason,
+      active: true
+    });
+
+    this.scheduledRestartTimer = setInterval(async () => {
+      this.scheduledRestartCountdown -= 1;
+      const c = this.scheduledRestartCountdown;
+
+      if (c === 300 || c === 180 || c === 120 || c === 60) {
+        this.broadcastMessage(`[RESTART] Warning: Server will restart in ${Math.round(c / 60)} minute(s)! Please find safe shelter.`);
+      } else if (c === 30 || c === 15) {
+        this.broadcastMessage(`[RESTART] Warning: Server restarting in ${c} seconds! Log out safely now!`);
+      } else if (c === 5) {
+        this.broadcastMessage(`[RESTART] Server restarting in 5 seconds! Saving world state...`);
+        if (this.rcon && this.rcon.authenticated) {
+          this.rcon.send('save').catch(() => {});
+        }
+      } else if (c <= 0) {
+        clearInterval(this.scheduledRestartTimer);
+        this.scheduledRestartTimer = null;
+        this.scheduledRestartCountdown = 0;
+        this.restartServer();
+      }
+
+      this.broadcast({
+        type: 'restart_countdown',
+        countdown: this.scheduledRestartCountdown,
+        reason: this.scheduledRestartReason,
+        active: this.scheduledRestartCountdown > 0
+      });
+    }, 1000);
+
+    return { success: true, countdown: seconds, reason };
+  }
+
+  cancelScheduledRestart() {
+    if (this.scheduledRestartTimer) {
+      clearInterval(this.scheduledRestartTimer);
+      this.scheduledRestartTimer = null;
+      this.scheduledRestartCountdown = 0;
+      this.broadcastMessage('[SERVER] Scheduled restart was cancelled by administrator.');
+      this.addLog('[Supervisor] Scheduled restart was cancelled.', 'supervisor');
+      this.broadcast({ type: 'restart_countdown', countdown: 0, reason: '', active: false });
+      return { success: true };
+    }
+    return { success: false, message: 'No restart was scheduled' };
+  }
+
+  async broadcastMessage(msg) {
+    const clean = (msg || '').toString().replace(/"/g, "'").trim();
+    if (!clean) return { success: false, message: 'Empty message' };
+    this.addLog(`[Broadcast] ${clean}`, 'supervisor');
+    if (this.rcon && this.rcon.authenticated) {
+      return this.rcon.send(`servermsg "${clean}"`);
+    }
+    return { success: false, message: 'Server not online' };
   }
 
   async runScript(scriptPath, args = []) {

@@ -26,7 +26,11 @@ import {
   RotateCcw,
   Zap,
   ListOrdered,
-  FileCode
+  FileCode,
+  ShieldCheck,
+  Wrench,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { modsApi, serverApi } from '../services/api';
 
@@ -72,6 +76,11 @@ export default function ModsTab() {
   const [notice, setNotice] = useState(null);
   const [searchFilter, setSearchFilter] = useState('');
   const [copiedType, setCopiedType] = useState(null);
+
+  // Validation state
+  const [validating, setValidating] = useState(false);
+  const [validationReport, setValidationReport] = useState(null);
+  const [showValidationModal, setShowValidationModal] = useState(false);
 
   // Drag and Drop state
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -153,6 +162,30 @@ export default function ModsTab() {
   const handleResetOrder = () => {
     setActiveMods([...savedMods]);
     setActiveWorkshopItems([...savedWorkshopItems]);
+  };
+
+  const handleValidateModpack = async () => {
+    setValidating(true);
+    setShowValidationModal(true);
+    try {
+      const res = await modsApi.validateModpack(activeWorkshopItems, activeMods);
+      setValidationReport(res);
+    } catch (err) {
+      alert(`Validation failed: ${err.message}`);
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleApplyAutoFix = async () => {
+    if (!validationReport?.autoFix) return;
+    const { workshopItems, mods } = validationReport.autoFix;
+    setActiveWorkshopItems(workshopItems);
+    setActiveMods(mods);
+    await saveCurrentMods(workshopItems, mods);
+    setShowValidationModal(false);
+    setNotice('Modpack auto-fixed, missing dependencies added, and load order optimized!');
+    setTimeout(() => setNotice(null), 4000);
   };
 
   // Reordering helpers
@@ -525,6 +558,16 @@ export default function ModsTab() {
               </button>
             </>
           )}
+
+          <button
+            onClick={handleValidateModpack}
+            disabled={validating}
+            className="btn btn-secondary btn-sm text-emerald-400 hover:text-emerald-300 border-emerald-500/30 bg-emerald-500/10"
+            title="Cross-check active mods against workshop items and detect missing dependencies"
+          >
+            <ShieldCheck className={`w-3.5 h-3.5 ${validating ? 'animate-spin' : ''}`} />
+            <span>Validate Modpack</span>
+          </button>
 
           <button
             onClick={handleSyncMods}
@@ -1118,6 +1161,127 @@ export default function ModsTab() {
           </div>
         </div>
       </div>
+
+      {/* Validation Diagnostics Modal */}
+      {showValidationModal && (
+        <div className="modal-overlay">
+          <div className="modal-content max-w-2xl p-5 flex flex-col gap-4">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)]">
+              <div className="flex items-center gap-2.5">
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-sm font-bold text-white">Modpack Validator & Diagnostics</h3>
+              </div>
+              <button
+                onClick={() => setShowValidationModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {validating ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-400">
+                <RefreshCw className="w-7 h-7 text-emerald-400 animate-spin" />
+                <p className="text-xs">Analyzing mod dependencies and matching workshop items...</p>
+              </div>
+            ) : validationReport ? (
+              <div className="flex flex-col gap-4">
+                {/* Summary Banner */}
+                <div
+                  className={`p-3.5 rounded-xl border flex flex-wrap items-center justify-between gap-3 ${
+                    validationReport.issues.length === 0
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                      : validationReport.issues.some((i) => i.severity === 'error')
+                      ? 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                      : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    {validationReport.issues.length === 0 ? (
+                      <Check className="w-5 h-5 text-emerald-400 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                    )}
+                    <div>
+                      <h4 className="text-xs font-bold text-white">
+                        {validationReport.issues.length === 0
+                          ? 'Modpack is Healthy & Valid!'
+                          : `${validationReport.issues.length} Issue(s) Detected`}
+                      </h4>
+                      <p className="text-[11px] opacity-80">
+                        {validationReport.stats.totalMods} Active Mods • {validationReport.stats.totalWorkshopItems} Workshop Items
+                      </p>
+                    </div>
+                  </div>
+
+                  {validationReport.issues.length > 0 && (
+                    <button
+                      onClick={handleApplyAutoFix}
+                      className="btn btn-primary btn-sm text-xs font-bold shadow-glow text-white"
+                    >
+                      <Wrench className="w-3.5 h-3.5" />
+                      <span>1-Click Auto-Fix All</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Issues List */}
+                <div className="max-h-80 overflow-y-auto divide-y divide-[var(--border-subtle)] pr-1">
+                  {validationReport.issues.length === 0 ? (
+                    <div className="py-6 text-center text-xs text-slate-400">
+                      All mod dependencies are present in Mods= and properly linked to Workshop items. No load order inversions found!
+                    </div>
+                  ) : (
+                    validationReport.issues.map((issue) => (
+                      <div key={issue.id} className="py-2.5 flex items-start gap-2.5">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase shrink-0 mt-0.5 ${
+                            issue.severity === 'error'
+                              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                              : issue.severity === 'warning'
+                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                              : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                          }`}
+                        >
+                          {issue.severity}
+                        </span>
+                        <div className="flex-1 min-w-0 text-xs">
+                          <div className="font-semibold text-slate-200">{issue.title}</div>
+                          <p className="text-slate-400 text-[11px] mt-0.5">{issue.message}</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-between pt-3 border-t border-[var(--border-subtle)] text-xs">
+                  <span className="text-slate-400 text-[11px]">
+                    Auto-fix automatically inserts missing dependencies, links missing workshop IDs, and prioritizes frameworks.
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowValidationModal(false)}
+                      className="btn btn-secondary btn-sm"
+                    >
+                      Close
+                    </button>
+                    {validationReport.issues.length > 0 && (
+                      <button
+                        onClick={handleApplyAutoFix}
+                        className="btn btn-primary btn-sm font-bold"
+                      >
+                        Apply Auto-Fix
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

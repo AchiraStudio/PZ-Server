@@ -45,6 +45,9 @@ export const serverApi = {
   start: () => request('/server/start', { method: 'POST' }),
   stop: () => request('/server/stop', { method: 'POST' }),
   restart: () => request('/server/restart', { method: 'POST' }),
+  scheduleRestart: (seconds, reason) => request('/server/schedule-restart', { method: 'POST', body: { seconds, reason } }),
+  cancelRestart: () => request('/server/cancel-restart', { method: 'POST' }),
+  broadcast: (message) => request('/server/broadcast', { method: 'POST', body: { message } }),
   update: () => request('/server/update', { method: 'POST' }),
   syncMods: () => request('/server/sync-mods', { method: 'POST' }),
   sendCommand: (command) => request('/server/command', { method: 'POST', body: { command } }),
@@ -57,13 +60,16 @@ export const configApi = {
   saveServerIni: (payload) => request('/config/server-ini', { method: 'POST', body: payload }),
   getSandbox: () => request('/config/sandbox'),
   saveSandbox: (payload) => request('/config/sandbox', { method: 'POST', body: payload }),
-  getPresets: () => request('/config/presets')
+  getPresets: () => request('/config/presets'),
+  getMaps: () => request('/config/maps'),
+  saveMaps: (maps) => request('/config/maps', { method: 'POST', body: { maps } })
 };
 
 // Mods Management
 export const modsApi = {
   getMods: () => request('/mods'),
   saveMods: (workshopItems, mods) => request('/mods', { method: 'POST', body: { workshopItems, mods } }),
+  validateModpack: (workshopItems, mods) => request('/mods/validate', { method: 'POST', body: { workshopItems, mods } }),
   fetchCollection: (collectionUrl) => request('/mods/fetch-collection', { method: 'POST', body: { collectionUrl } }),
   fetchItem: (workshopId) => request('/mods/fetch-item', { method: 'POST', body: { workshopId } }),
   parseBulk: (text) => request('/mods/parse-bulk', { method: 'POST', body: { text } }),
@@ -85,7 +91,9 @@ export const backupsApi = {
   getWorlds: () => request('/worlds'),
   createBackup: (worldName) => request('/worlds/backup', { method: 'POST', body: { worldName } }),
   deleteBackup: (filename) => request(`/worlds/backup/${encodeURIComponent(filename)}`, { method: 'DELETE' }),
-  wipeWorld: (worldName) => request('/worlds/wipe', { method: 'POST', body: { worldName } })
+  wipeWorld: (worldName) => request('/worlds/wipe', { method: 'POST', body: { worldName } }),
+  getSettings: () => request('/backups/settings'),
+  saveSettings: (settings) => request('/backups/settings', { method: 'POST', body: settings })
 };
 
 // File Manager APIs (All tested with proper safe relative paths)

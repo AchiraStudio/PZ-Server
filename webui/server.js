@@ -147,6 +147,24 @@ app.post('/api/server/command', async (req, res) => {
   res.json(result);
 });
 
+app.post('/api/server/broadcast', async (req, res) => {
+  const { message } = req.body;
+  if (!message) return res.status(400).json({ error: 'Message required' });
+  const result = await pz.broadcastMessage(message);
+  res.json(result);
+});
+
+app.post('/api/server/schedule-restart', (req, res) => {
+  const { seconds, reason } = req.body;
+  const result = pz.scheduleRestart(parseInt(seconds, 10) || 60, reason || 'Maintenance');
+  res.json(result);
+});
+
+app.post('/api/server/cancel-restart', (req, res) => {
+  const result = pz.cancelScheduledRestart();
+  res.json(result);
+});
+
 app.post('/api/server/update', async (req, res) => {
   try {
     const script = fs.existsSync('/usr/local/bin/download_server.sh')
@@ -367,6 +385,93 @@ app.get('/api/config/presets', (req, res) => {
   });
 });
 
+// Custom Mod Maps Manager API (Map= Ordering in server.ini)
+app.get('/api/config/maps', (req, res) => {
+  ensureConfigDir();
+  let currentMaps = ['Muldraugh, KY'];
+  if (fs.existsSync(SERVER_INI_PATH)) {
+    const { data } = parseIni(fs.readFileSync(SERVER_INI_PATH, 'utf8'));
+    if (data.Map) {
+      currentMaps = data.Map.split(';').map(s => s.trim()).filter(Boolean);
+    }
+  }
+
+  // Scan local mod folders for custom map entries
+  const detectedMaps = new Set();
+  const localModsDir = path.join(DATA_DIR, 'Zomboid', 'mods');
+  if (fs.existsSync(localModsDir)) {
+    try {
+      const modDirs = fs.readdirSync(localModsDir, { withFileTypes: true });
+      for (const md of modDirs) {
+        if (md.isDirectory()) {
+          const mapsPath = path.join(localModsDir, md.name, 'media', 'maps');
+          if (fs.existsSync(mapsPath)) {
+            const mEntries = fs.readdirSync(mapsPath, { withFileTypes: true });
+            for (const me of mEntries) {
+              if (me.isDirectory()) detectedMaps.add(me.name);
+            }
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  const popularCustomMaps = [
+    'RavenCreek',
+    'Blackwood',
+    'Grapeseed',
+    'LakeIvyTownship',
+    'Pitstop',
+    'RosewoodMilitaryHospital',
+    'WestPointExpansion',
+    'BedfordFalls',
+    'FortRedstone',
+    'Chinatown',
+    'Over the River',
+    'Elysium_Island',
+    'Kingsmouth',
+    'SlocanLake',
+    'Greenfield',
+    'Chestown'
+  ];
+
+  const vanillaMaps = ['Muldraugh, KY', 'Riverside, KY', 'Rosewood, KY', 'West Point, KY'];
+
+  res.json({
+    currentMaps,
+    detectedMaps: Array.from(detectedMaps),
+    popularCustomMaps,
+    vanillaMaps
+  });
+});
+
+app.post('/api/config/maps', (req, res) => {
+  ensureConfigDir();
+  let { maps } = req.body;
+  if (!Array.isArray(maps) || maps.length === 0) {
+    maps = ['Muldraugh, KY'];
+  }
+
+  // Enforce PZ rule: Custom maps must come FIRST, Muldraugh, KY must be at the very bottom
+  const customMaps = maps.filter(m => m !== 'Muldraugh, KY');
+  const orderedMaps = [...customMaps, 'Muldraugh, KY'];
+
+  let origData = {};
+  let originalRawLines = [];
+  if (fs.existsSync(SERVER_INI_PATH)) {
+    const origRaw = fs.readFileSync(SERVER_INI_PATH, 'utf8');
+    const parsed = parseIni(origRaw);
+    origData = parsed.data;
+    originalRawLines = parsed.rawLines;
+  }
+
+  origData.Map = orderedMaps.join(';');
+  const newIni = serializeIni(origData, originalRawLines);
+  fs.writeFileSync(SERVER_INI_PATH, newIni, 'utf8');
+
+  res.json({ success: true, maps: orderedMaps });
+});
+
 // ==========================================
 // MODS MANAGEMENT API
 // ==========================================
@@ -540,6 +645,29 @@ app.post('/api/mods/bulk-add', (req, res) => {
   });
 });
 
+// Validate modpack: check for missing dependencies, missing workshop items, load order
+app.post('/api/mods/validate', async (req, res) => {
+  ensureConfigDir();
+  let { workshopItems, mods } = req.body;
+  if (!Array.isArray(workshopItems) || !Array.isArray(mods)) {
+    if (fs.existsSync(SERVER_INI_PATH)) {
+      const { data } = parseIni(fs.readFileSync(SERVER_INI_PATH, 'utf8'));
+      workshopItems = data.WorkshopItems ? data.WorkshopItems.split(';').map(s => s.trim()).filter(Boolean) : [];
+      mods = data.Mods ? data.Mods.split(';').map(s => s.trim()).filter(Boolean) : [];
+    } else {
+      workshopItems = [];
+      mods = [];
+    }
+  }
+
+  try {
+    const report = await steamWorkshop.validateModpack(workshopItems, mods);
+    res.json(report);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // ==========================================
 // PLAYERS & ROLES / BANS API
@@ -658,6 +786,80 @@ app.post('/api/worlds/wipe', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Automated Backups & Crash Recovery Settings
+const BACKUP_SCHEDULE_PATH = path.join(DATA_DIR, 'backup_schedule.json');
+
+function getBackupSchedule() {
+  const defaults = {
+    enabled: true,
+    intervalHours: 6,
+    maxKeep: 10,
+    lastBackup: null
+  };
+  try {
+    if (fs.existsSync(BACKUP_SCHEDULE_PATH)) {
+      return { ...defaults, ...JSON.parse(fs.readFileSync(BACKUP_SCHEDULE_PATH, 'utf8')) };
+    }
+  } catch (e) {}
+  return defaults;
+}
+
+function saveBackupSchedule(cfg) {
+  try {
+    fs.writeFileSync(BACKUP_SCHEDULE_PATH, JSON.stringify(cfg, null, 2), 'utf8');
+  } catch (e) {}
+}
+
+app.get('/api/backups/settings', (req, res) => {
+  const cfg = getBackupSchedule();
+  let nextBackup = null;
+  if (cfg.enabled) {
+    nextBackup = (cfg.lastBackup || Date.now()) + (cfg.intervalHours * 3600 * 1000);
+  }
+  res.json({
+    ...cfg,
+    nextBackup,
+    crashRecovery: true
+  });
+});
+
+app.post('/api/backups/settings', (req, res) => {
+  const { enabled, intervalHours, maxKeep } = req.body;
+  const current = getBackupSchedule();
+  if (enabled !== undefined) current.enabled = Boolean(enabled);
+  if (intervalHours !== undefined) current.intervalHours = Math.max(1, parseInt(intervalHours, 10) || 6);
+  if (maxKeep !== undefined) current.maxKeep = Math.max(1, parseInt(maxKeep, 10) || 10);
+  saveBackupSchedule(current);
+  res.json({ success: true, settings: current });
+});
+
+// Automated backup background scheduler (runs every 60s)
+setInterval(async () => {
+  const cfg = getBackupSchedule();
+  if (!cfg.enabled) return;
+
+  const now = Date.now();
+  const intervalMs = cfg.intervalHours * 3600 * 1000;
+  if (!cfg.lastBackup || (now - cfg.lastBackup) >= intervalMs) {
+    console.log('[AutoBackup] Time for scheduled world backup. Triggering...');
+    try {
+      if (pz.rcon && pz.rcon.authenticated) {
+        pz.rcon.send('servermsg "[SERVER] Performing automated world backup..."').catch(() => {});
+        pz.rcon.send('save').catch(() => {});
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      const res = await backupManager.createBackup(SERVER_NAME);
+      await backupManager.pruneBackups(cfg.maxKeep);
+      cfg.lastBackup = Date.now();
+      saveBackupSchedule(cfg);
+      pz.addLog(`[AutoBackup] Automated backup created: ${res.filename} (Retaining last ${cfg.maxKeep})`, 'supervisor');
+    } catch (err) {
+      console.error('[AutoBackup] Scheduled backup failed:', err.message);
+      pz.addLog(`[AutoBackup] Scheduled backup failed: ${err.message}`, 'supervisor');
+    }
+  }
+}, 60000);
 
 // ==========================================
 // FILE MANAGER API

@@ -8,7 +8,15 @@ class BackupManager {
     this.dataDir = path.resolve(dataDir);
     this.serverName = serverName;
     this.backupDir = path.join(this.dataDir, 'backups');
-    this.savesDir = path.join(this.dataDir, 'Zomboid', 'saves', 'Multiplayer');
+    const upperSaves = path.join(this.dataDir, 'Zomboid', 'Saves', 'Multiplayer');
+    const lowerSaves = path.join(this.dataDir, 'Zomboid', 'saves', 'Multiplayer');
+    this.savesDir = fs.existsSync(upperSaves) ? upperSaves : (fs.existsSync(lowerSaves) ? lowerSaves : upperSaves);
+  }
+
+  getActualSavesDir() {
+    const upperSaves = path.join(this.dataDir, 'Zomboid', 'Saves', 'Multiplayer');
+    const lowerSaves = path.join(this.dataDir, 'Zomboid', 'saves', 'Multiplayer');
+    return fs.existsSync(upperSaves) ? upperSaves : (fs.existsSync(lowerSaves) ? lowerSaves : upperSaves);
   }
 
   ensureBackupDir() {
@@ -18,7 +26,21 @@ class BackupManager {
   }
 
   getWorldPath(name = this.serverName) {
-    return path.join(this.savesDir, name);
+    return path.join(this.getActualSavesDir(), name);
+  }
+
+  async pruneBackups(maxKeep = 5) {
+    const backups = await this.listBackups();
+    if (backups.length > maxKeep) {
+      const toRemove = backups.slice(maxKeep);
+      for (const b of toRemove) {
+        try {
+          if (fs.existsSync(b.path)) {
+            await fs.promises.unlink(b.path);
+          }
+        } catch (e) {}
+      }
+    }
   }
 
   async listWorlds() {

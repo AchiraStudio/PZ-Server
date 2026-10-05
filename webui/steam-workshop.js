@@ -352,10 +352,175 @@ function parseBulkText(text) {
   };
 }
 
+const FRAMEWORK_DEPENDENCY_RULES = [
+  {
+    triggers: ['autotsar', 'tsartrailer', 'aquatsar', 'jaapwrangler', 'tuningatelier'],
+    requiredMod: 'tsarslib',
+    requiredWorkshopId: '2392709985',
+    name: "Tsar's Common Library (tsarslib)"
+  },
+  {
+    triggers: ['cyespushdoors', 'improvedhairmenu', 'improvedhairmenubuild42'],
+    requiredMod: 'NeatUI_Framework',
+    requiredWorkshopId: '3415470189',
+    name: 'NeatUI Framework (NeatUI_Framework)'
+  },
+  {
+    triggers: ['trueactionsdancing'],
+    requiredMod: 'TrueActions',
+    requiredWorkshopId: '2463184726',
+    name: 'True Actions'
+  },
+  {
+    triggers: ['arsenal26gunfighter'],
+    requiredMod: 'Brita',
+    requiredWorkshopId: '2200148440',
+    name: "Brita's Weapon Pack / Arsenal[26] GunFighter"
+  }
+];
+
+const KNOWN_FRAMEWORKS_ORDER = [
+  'modtemplate', 'tsarslib', 'tsarcommonlibrary', 'trueactions', 'trueactionsdancing',
+  'filibusterrhymesusedcars', 'filibuster', 'bettersort', 'neatui', 'neatui_framework',
+  'itemtweakerapi', 'spawnmanager', 'k15', 'ki5', 'easyconfig_ch', 'starlitlibrary',
+  'pzgate', 'equipmentui', 'automechanics', 'managecontainers'
+];
+
+async function validateModpack(workshopItems = [], mods = []) {
+  const issues = [];
+  const autoFixMods = [...mods];
+  const autoFixWs = [...workshopItems];
+
+  const wsDetails = await batchFetchModDetails(workshopItems.slice(0, 100), 5);
+
+  for (const item of wsDetails) {
+    const hasAnyActive = (item.modIds || []).some(mId => 
+      mods.some(activeMod => activeMod.toLowerCase() === mId.toLowerCase())
+    );
+    if (!hasAnyActive && item.modIds && item.modIds.length > 0) {
+      issues.push({
+        id: `orphan_${item.workshopId}`,
+        type: 'orphan_workshop_item',
+        severity: 'warning',
+        title: 'Downloaded but Inactive Mod',
+        message: `Workshop item "${item.title}" (#${item.workshopId}) is in WorkshopItems, but mod "${item.modIds[0]}" is not enabled in Mods=.`,
+        suggestedModId: item.modIds[0],
+        workshopId: item.workshopId
+      });
+      if (!autoFixMods.includes(item.modIds[0])) {
+        autoFixMods.push(item.modIds[0]);
+      }
+    }
+  }
+
+  for (const rule of FRAMEWORK_DEPENDENCY_RULES) {
+    const triggeringMod = mods.find(m => 
+      rule.triggers.some(t => m.toLowerCase().includes(t)) &&
+      m.toLowerCase() !== rule.requiredMod.toLowerCase()
+    );
+    if (triggeringMod) {
+      const hasRequirement = mods.some(m => m.toLowerCase().includes(rule.requiredMod.toLowerCase()));
+      if (!hasRequirement) {
+        issues.push({
+          id: `missing_dep_${rule.requiredMod}`,
+          type: 'missing_dependency',
+          severity: 'error',
+          title: 'Missing Core Dependency',
+          message: `Active mod "${triggeringMod}" depends on "${rule.name}", which is not currently in Mods=.`,
+          suggestedModId: rule.requiredMod,
+          workshopId: rule.requiredWorkshopId
+        });
+        if (!autoFixMods.includes(rule.requiredMod)) {
+          autoFixMods.unshift(rule.requiredMod);
+        }
+        if (rule.requiredWorkshopId && !autoFixWs.includes(rule.requiredWorkshopId)) {
+          autoFixWs.push(rule.requiredWorkshopId);
+        }
+      }
+    }
+  }
+
+  for (const fw of KNOWN_FRAMEWORKS_ORDER) {
+    const fwIdx = mods.findIndex(m => m.toLowerCase().includes(fw));
+    if (fwIdx > 5) {
+      issues.push({
+        id: `load_order_${fw}`,
+        type: 'load_order_inversion',
+        severity: 'info',
+        title: 'Suboptimal Load Order Position',
+        message: `Core library "${mods[fwIdx]}" is loaded at position #${fwIdx + 1}. Frameworks should ideally load at the beginning.`,
+        suggestedModId: mods[fwIdx]
+      });
+    }
+  }
+
+  // Check for active mods that have missing Workshop IDs
+  const allKnownWsModIds = new Set();
+  for (const item of wsDetails) {
+    (item.modIds || []).forEach(m => allKnownWsModIds.add(m.toLowerCase()));
+  }
+
+  for (const mod of mods) {
+    const isDownloaded = allKnownWsModIds.has(mod.toLowerCase());
+    if (!isDownloaded && wsDetails.length > 0) {
+      const rule = FRAMEWORK_DEPENDENCY_RULES.find(r => r.requiredMod.toLowerCase() === mod.toLowerCase());
+      if (rule && rule.requiredWorkshopId && !workshopItems.includes(rule.requiredWorkshopId)) {
+        issues.push({
+          id: `missing_ws_${mod}`,
+          type: 'missing_workshop_item',
+          severity: 'error',
+          title: 'Missing Steam Workshop Item',
+          message: `Active mod "${mod}" is enabled in Mods=, but its Workshop ID (#${rule.requiredWorkshopId}) is missing from WorkshopItems=.`,
+          suggestedModId: mod,
+          workshopId: rule.requiredWorkshopId
+        });
+        if (!autoFixWs.includes(rule.requiredWorkshopId)) {
+          autoFixWs.push(rule.requiredWorkshopId);
+        }
+      }
+    }
+  }
+
+  const frameworks = [];
+  const others = [];
+  autoFixMods.forEach(m => {
+    if (KNOWN_FRAMEWORKS_ORDER.some(fw => m.toLowerCase().includes(fw))) {
+      frameworks.push(m);
+    } else {
+      others.push(m);
+    }
+  });
+
+  frameworks.sort((a, b) => {
+    const idxA = KNOWN_FRAMEWORKS_ORDER.findIndex(fw => a.toLowerCase().includes(fw));
+    const idxB = KNOWN_FRAMEWORKS_ORDER.findIndex(fw => b.toLowerCase().includes(fw));
+    return (idxA >= 0 ? idxA : 999) - (idxB >= 0 ? idxB : 999);
+  });
+
+  const optimizedMods = [...new Set([...frameworks, ...others])];
+  const optimizedWs = [...new Set(autoFixWs)];
+
+  return {
+    isValid: issues.filter(i => i.severity === 'error').length === 0,
+    hasWarnings: issues.length > 0,
+    issues,
+    stats: {
+      totalWorkshopItems: workshopItems.length,
+      totalMods: mods.length,
+      issuesCount: issues.length
+    },
+    autoFix: {
+      workshopItems: optimizedWs,
+      mods: optimizedMods
+    }
+  };
+}
+
 module.exports = {
   fetchCollection,
   fetchModDetails,
   batchFetchModDetails,
   parseBulkText,
+  validateModpack,
   extractId
 };

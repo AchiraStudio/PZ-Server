@@ -20,6 +20,7 @@ export default function App() {
   const [onlinePlayers, setOnlinePlayers] = useState([]);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [restartInfo, setRestartInfo] = useState({ active: false, countdown: 0, reason: '' });
 
   const wsRef = useRef(null);
 
@@ -82,12 +83,25 @@ export default function App() {
           if (msg.status) setStatus((prev) => ({ ...(prev || {}), status: msg.status }));
           if (msg.onlinePlayers) setOnlinePlayers(msg.onlinePlayers);
           if (msg.logs) setLogs(msg.logs);
+          if (msg.restartActive) {
+            setRestartInfo({
+              active: true,
+              countdown: msg.countdown,
+              reason: msg.countdownReason || ''
+            });
+          }
         } else if (msg.type === 'log') {
           setLogs((prev) => [...prev.slice(-2500), msg.log]);
         } else if (msg.type === 'status') {
           setStatus((prev) => ({ ...(prev || {}), status: msg.status }));
         } else if (msg.type === 'players') {
           setOnlinePlayers(msg.onlinePlayers || []);
+        } else if (msg.type === 'restart_countdown') {
+          setRestartInfo({
+            active: msg.active,
+            countdown: msg.countdown,
+            reason: msg.reason || ''
+          });
         }
       },
       () => {
@@ -217,6 +231,7 @@ export default function App() {
             logs={logs}
             onSendCommand={handleSendCommand}
             isOnline={status?.status === 'online'}
+            restartInfo={restartInfo}
           />
         )}
 

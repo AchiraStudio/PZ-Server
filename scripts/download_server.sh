@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-set -e
 
+set -e
 : "${BUILD:=stable}"
-: "${DISABLE_CACHE:=false}"
+: "${DISABLE_CACHE:=true}"
 
 mountpoint /cache &> /dev/null || DISABLE_CACHE="true"
 
@@ -15,30 +15,20 @@ elif [ "$BUILD" == "unstable" ]; then
 elif [ "$BUILD" == "41" ]; then
     BRANCHE="legacy41"
 else
-    echo "BUILD ${BUILD} not recognized, falling back to public"
-    BRANCHE="public"
+    echo "BUILD ${BUILD} not supported"
+    exit 1
 fi
 
 echo "=========================================================="
-echo " Downloading Project Zomboid Dedicated Server [${BUILD}]... "
-echo " Steam Branch: ${BRANCHE}                                  "
+echo " Project Zomboid Dedicated Server [${BUILD}]"
+echo " Fast Boot Mode: Validation Disabled"
 echo "=========================================================="
 
-if [[ "$DISABLE_CACHE" =~ ^(0|false|False|n|N)$ ]]; then
-    cache.sh restore_steamcmd || true
-    cache.sh restore_app "$BUILD" || true
-fi
-
-BETA_ARG=""
-if [ -n "$BRANCHE" ] && [ "$BRANCHE" != "public" ]; then
-    BETA_ARG="-beta ${BRANCHE}"
-fi
-
-steamcmd.sh +force_install_dir /app +login anonymous +app_info_print 380870 +app_update 380870 ${BETA_ARG} validate +quit
-
-if [[ "$DISABLE_CACHE" =~ ^(0|false|False|n|N)$ ]]; then
-    cache.sh backup_steamcmd || true
-    cache.sh backup_app "$BUILD" || true
+if [ -f "/app/start-server.sh" ]; then
+    echo "[Server Launcher] Server binaries found in /app. Skipping steamcmd validation."
+else
+    echo "[Server Launcher] Downloading server BUILD ${BUILD} (without validate)..."
+    steamcmd.sh +force_install_dir /app +login anonymous +app_update 380870 -beta "${BRANCHE}" +quit
 fi
 
 configure_server.sh "$BUILD"

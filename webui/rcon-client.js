@@ -89,8 +89,8 @@ class RconClient extends EventEmitter {
         }
         const authTimer = setTimeout(() => {
           this.removeListener('authenticated', onAuth);
-          reject(new Error('RCON not ready (server booting or starting)'));
-        }, 5000);
+          reject(new Error('Server is still starting up (console port not ready yet). Please wait until the server is fully loaded.'));
+        }, 15000);
 
         const onAuth = () => {
           clearTimeout(authTimer);

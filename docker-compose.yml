@@ -15,12 +15,15 @@ services:
       MAX_RAM: ${MAX_RAM:-8g}
       DISABLE_MOD_DOWNLOADER: ${DISABLE_MOD_DOWNLOADER:-false}
       DISABLE_CACHE: ${DISABLE_CACHE:-true}
+      VALIDATE: ${VALIDATE:-false}
+      SKIP_UPDATE: ${SKIP_UPDATE:-false}
     ports:
       - "16261:16261/udp"
       - "16262:16262/udp"
       - "27015:27015"
     volumes:
       - ./data:/data
+      - ./scripts/download_server.sh:/usr/local/bin/download_server.sh:ro
 
 
   webui:
